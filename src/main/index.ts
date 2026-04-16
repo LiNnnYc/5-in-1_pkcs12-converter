@@ -1,0 +1,50 @@
+import { app, BrowserWindow } from "electron";
+import { join } from "node:path";
+
+const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
+
+function createMainWindow(): BrowserWindow {
+  const window = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    minWidth: 960,
+    minHeight: 640,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  });
+
+  window.once("ready-to-show", () => {
+    window.show();
+  });
+
+  if (app.isPackaged) {
+    void window.loadFile(join(__dirname, "../renderer/index.html"));
+  } else {
+    void window.loadURL(VITE_DEV_SERVER_URL);
+    window.webContents.openDevTools({ mode: "detach" });
+  }
+
+  return window;
+}
+
+app.whenReady().then(() => {
+  createMainWindow();
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createMainWindow();
+    }
+  });
+});
+
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+

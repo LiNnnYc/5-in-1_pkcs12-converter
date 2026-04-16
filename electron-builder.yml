@@ -1,0 +1,15 @@
+appId: com.pkcs12.converter
+productName: PKCS12_Converter
+directories:
+  output: release
+files:
+  - dist/**/*
+  - package.json
+extraResources:
+  - from: engines
+    to: engines
+win:
+  target:
+    - portable
+  artifactName: ${productName}-${version}.${ext}
+

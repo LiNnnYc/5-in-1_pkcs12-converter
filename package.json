@@ -1,0 +1,34 @@
+{
+  "name": "pkcs12-converter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows desktop app for PKCS#12 merge, extract, and view workflows.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:start\"",
+    "dev:renderer": "vite",
+    "dev:main": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
+    "dev:start": "wait-on tcp:5173 file:dist/main/index.js && electron .",
+    "build": "npm run build:renderer && npm run build:main",
+    "build:renderer": "vite build",
+    "build:main": "tsc -p tsconfig.node.json",
+    "package": "npm run build && electron-builder --config electron-builder.yml",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "vue-i18n": "^10.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "concurrently": "^9.1.0",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
+  }
+}
+
