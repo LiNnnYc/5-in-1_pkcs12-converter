@@ -14,16 +14,7 @@
       "DOM",
       "DOM.Iterable"
     ],
-    "skipLibCheck": true,
-    "baseUrl": ".",
-    "paths": {
-      "@renderer/*": [
-        "src/renderer/*"
-      ],
-      "@types/*": [
-        "src/types/*"
-      ]
-    }
+    "skipLibCheck": true
   },
   "include": [
     "src/renderer/**/*.ts",

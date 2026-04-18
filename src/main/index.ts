@@ -1,5 +1,9 @@
 import { app, BrowserWindow } from "electron";
 import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { registerIpcHandlers } from "./ipc-handlers";
+import { resolveWorkDir, resolveExeDir } from "./utils/path-resolver";
+import { initLogger, createLogger, shutdownLogger } from "./utils/logger";
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 
@@ -33,6 +37,10 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  initLogger({ exeDir: resolveExeDir() });
+  const log = createLogger("app");
+  log.info("ready", { packaged: app.isPackaged, platform: process.platform });
+  registerIpcHandlers();
   createMainWindow();
 
   app.on("activate", () => {
@@ -46,5 +54,16 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("will-quit", () => {
+  const log = createLogger("app");
+  try {
+    rmSync(resolveWorkDir(), { recursive: true, force: true });
+    log.info("will-quit: work dir removed");
+  } catch {
+    // Best-effort cleanup — nothing to do on failure.
+  }
+  shutdownLogger();
 });
 

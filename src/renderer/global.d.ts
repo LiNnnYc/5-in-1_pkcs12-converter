@@ -1,0 +1,35 @@
+import type {
+  MergePrecheckRequest,
+  MergeRequest,
+  ExtractRequest,
+  ViewRequest,
+  OpenFileDialogRequest,
+  SaveFileDialogRequest,
+  OpenDirectoryDialogRequest,
+  ListAliasesRequest,
+  JksToP12Request,
+  P12ToJksRequest,
+  OperationResult,
+  MergePrecheckResult,
+  Pkcs12ViewResult
+} from "../types";
+
+declare global {
+  interface Window {
+    electronAPI: {
+      mergePkcs12Precheck: (params: MergePrecheckRequest) => Promise<OperationResult<MergePrecheckResult>>;
+      mergePkcs12: (params: MergeRequest) => Promise<OperationResult>;
+      extractPkcs12: (params: ExtractRequest) => Promise<OperationResult>;
+      viewPkcs12: (params: ViewRequest) => Promise<OperationResult<Pkcs12ViewResult>>;
+      jksToP12: (params: JksToP12Request) => Promise<OperationResult>;
+      p12ToJks: (params: P12ToJksRequest) => Promise<OperationResult>;
+      listKeystoreAliases: (params: ListAliasesRequest) => Promise<OperationResult<{ aliases: string[] }>>;
+      openFileDialog: (params: OpenFileDialogRequest) => Promise<string[]>;
+      saveFileDialog: (params: SaveFileDialogRequest) => Promise<string>;
+      openDirectoryDialog: (params: OpenDirectoryDialogRequest) => Promise<string>;
+      getSessionId: () => Promise<string>;
+    };
+  }
+}
+
+export {};

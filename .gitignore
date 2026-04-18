@@ -4,3 +4,10 @@ release/
 .work/
 *.log
 
+# Claude Code 個人設定
+.claude/
+
+# AI 協作 / 內部文件（spec.md 除外，為專案權威規格）
+*.md
+!spec.md
+
