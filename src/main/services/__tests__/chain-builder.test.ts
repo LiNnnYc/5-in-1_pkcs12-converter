@@ -106,16 +106,32 @@ describe("buildChain (pure logic)", () => {
     expect(res.linked).toBe(true);
   });
 
-  it("marks not-linked when chain breaks and top still has AKI", () => {
+  it("marks not-linked when supplied chain pool exists but doesn't attach to server", () => {
     const srv = mkCert({
       subject: "CN=Srv", issuer: "CN=Int",
       authorityKeyIdentifier: "BB:BB",
       fingerprint: { sha1: "z", sha256: "srv" }
     });
-    const res = buildChain(srv, [srv]);
+    const stranger = mkCert({
+      subject: "CN=Stranger", issuer: "CN=OtherRoot",
+      subjectKeyIdentifier: "ZZ:ZZ",
+      fingerprint: { sha1: "u", sha256: "stranger" }
+    });
+    const res = buildChain(srv, [srv, stranger]);
     expect(res.chain).toHaveLength(1);
     expect(res.linked).toBe(false);
     expect(res.anchor).toBeUndefined();
+  });
+
+  it("marks linked when no chain certs supplied at all", () => {
+    const srv = mkCert({
+      subject: "CN=Srv", issuer: "CN=Int",
+      authorityKeyIdentifier: "BB:BB",
+      fingerprint: { sha1: "z2", sha256: "srv-alone" }
+    });
+    const res = buildChain(srv, [srv]);
+    expect(res.chain).toHaveLength(1);
+    expect(res.linked).toBe(true);
   });
 
   it("guards against infinite loops on cyclic issuer graph", () => {
@@ -160,15 +176,47 @@ describe("generateChainWarnings", () => {
     expect(warnings).toHaveLength(0);
   });
 
-  it("detects CHAIN_NOT_LINKED when top cert retains AKI and no parent exists", () => {
+  it("detects CHAIN_NOT_LINKED when supplied chain certs don't link to server", () => {
     const s3 = mkCert({
       subject: "CN=Srv3", issuer: "CN=GhostCA",
       authorityKeyIdentifier: "FF:FF",
       fingerprint: { sha1: "s3", sha256: "srv3" }
     });
-    const result = buildChain(s3, [s3]);
-    const warnings = generateChainWarnings(result, [], []);
+    const unrelated = mkCert({
+      subject: "CN=Other", issuer: "CN=OtherRoot",
+      subjectKeyIdentifier: "ZZ:ZZ",
+      fingerprint: { sha1: "u1", sha256: "unrel" }
+    });
+    const result = buildChain(s3, [s3, unrelated]);
+    const warnings = generateChainWarnings(result, [unrelated], []);
     expect(warnings.some((w) => w.code === "CHAIN_NOT_LINKED")).toBe(true);
+  });
+
+  it("does not warn CHAIN_NOT_LINKED when no chain certs supplied", () => {
+    const s4 = mkCert({
+      subject: "CN=Srv4", issuer: "CN=GhostCA",
+      authorityKeyIdentifier: "FF:FF",
+      fingerprint: { sha1: "s4", sha256: "srv4" }
+    });
+    const result = buildChain(s4, [s4]);
+    const warnings = generateChainWarnings(result, [], []);
+    expect(warnings.some((w) => w.code === "CHAIN_NOT_LINKED")).toBe(false);
+  });
+
+  it("does not warn CHAIN_NOT_LINKED when chain reaches an intermediate but not a root", () => {
+    const int = mkCert({
+      subject: "CN=Int", issuer: "CN=ExternalRoot",
+      subjectKeyIdentifier: "BB:BB", authorityKeyIdentifier: "AA:AA",
+      fingerprint: { sha1: "y", sha256: "int-only" }
+    });
+    const srv = mkCert({
+      subject: "CN=Srv", issuer: "CN=Int",
+      subjectKeyIdentifier: "CC:CC", authorityKeyIdentifier: "BB:BB",
+      fingerprint: { sha1: "z", sha256: "srv-only" }
+    });
+    const result = buildChain(srv, [srv, int]);
+    const warnings = generateChainWarnings(result, [int], []);
+    expect(warnings.some((w) => w.code === "CHAIN_NOT_LINKED")).toBe(false);
   });
 });
 

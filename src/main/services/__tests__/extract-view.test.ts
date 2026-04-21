@@ -115,7 +115,7 @@ d("extract-service + view-service integration", () => {
     expect(existsSync(workDir)).toBe(false);
   });
 
-  it("extract split mode writes server.crt + ca-1.crt", async () => {
+  it("extract split mode names certs by CN", async () => {
     const outDir = join(root, "out-split");
     mkdtempLike(outDir);
     const r = await extractPkcs12({
@@ -127,9 +127,8 @@ d("extract-service + view-service integration", () => {
     }, workDir);
     expect(r.success, r.message).toBe(true);
     expect(existsSync(join(outDir, "private.key"))).toBe(true);
-    expect(existsSync(join(outDir, "server.crt"))).toBe(true);
-    const caFiles = readdirSync(outDir).filter((f) => /^ca-\d+\.crt$/.test(f));
-    expect(caFiles.length).toBeGreaterThanOrEqual(1);
+    expect(existsSync(join(outDir, "extract-server.test.crt"))).toBe(true);
+    expect(existsSync(join(outDir, "ExtractTestInt.crt"))).toBe(true);
   });
 
   it("extract auto-detects legacy pfx and retries with -legacy", async () => {

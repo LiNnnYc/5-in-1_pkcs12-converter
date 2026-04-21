@@ -1,22 +1,37 @@
 import { app } from "electron";
 import { dirname, join, resolve } from "node:path";
 
-// In dev the compiled main lives at <project>/dist/main/utils, so exe dir is project root.
-// In prod (electron-builder portable), app.getPath('exe') points to the portable exe beside engines/.
-export function resolveExeDir(): string {
-  if (app.isPackaged) {
-    return dirname(app.getPath("exe"));
-  }
-  // dev: project root is two levels up from this file (dist/main/utils -> project)
+// Two distinct roots in a portable build:
+//   - engines live inside the self-extracted temp folder at process.resourcesPath/engines
+//   - .work / logs must live beside the user-visible portable launcher (PORTABLE_EXECUTABLE_DIR)
+// In dev both collapse to the project root.
+
+function devProjectRoot(): string {
+  // compiled main lives at <project>/dist/main/utils
   return resolve(__dirname, "..", "..", "..");
 }
 
+export function resolveRuntimeDir(): string {
+  if (app.isPackaged) {
+    return process.env.PORTABLE_EXECUTABLE_DIR || dirname(app.getPath("exe"));
+  }
+  return devProjectRoot();
+}
+
+// Back-compat alias: callers that need the user-visible dir (logs/.work).
+export function resolveExeDir(): string {
+  return resolveRuntimeDir();
+}
+
 export function resolveLogsDir(): string {
-  return join(resolveExeDir(), "logs");
+  return join(resolveRuntimeDir(), "logs");
 }
 
 export function resolveEnginesDir(): string {
-  return join(resolveExeDir(), "engines");
+  if (app.isPackaged) {
+    return join(process.resourcesPath, "engines");
+  }
+  return join(devProjectRoot(), "engines");
 }
 
 export function resolveOpensslPath(): string {
@@ -36,5 +51,5 @@ export function resolveJavaPath(): string {
 }
 
 export function resolveWorkDir(): string {
-  return join(resolveExeDir(), ".work");
+  return join(resolveRuntimeDir(), ".work");
 }

@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onActivated, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import FileSelector from "../components/FileSelector.vue";
-import PasswordInput from "../components/PasswordInput.vue";
+import Card from "../components/Card.vue";
+import Row from "../components/Row.vue";
+import FileField from "../components/FileField.vue";
+import PasswordField from "../components/PasswordField.vue";
+import Segmented from "../components/Segmented.vue";
+import Alert from "../components/Alert.vue";
 import ResultDisplay from "../components/ResultDisplay.vue";
+import Icon from "../components/Icon.vue";
 import { useHandoff } from "../stores/handoff";
 import type { CertOutputMode, LegacyMode, OperationResult } from "../../types";
 
@@ -21,7 +26,7 @@ const form = reactive({
 const busy = ref(false);
 const result = ref<OperationResult | null>(null);
 
-onMounted(() => {
+onActivated(() => {
   const payload = consume("extract");
   if (payload) {
     form.pfxFile = payload.pfxFile;
@@ -29,10 +34,30 @@ onMounted(() => {
   }
 });
 
+function resetAll() {
+  form.pfxFile = "";
+  form.pfxPassword = "";
+  form.outputDir = "";
+  form.certOutputMode = "merged";
+  form.legacyMode = "auto";
+  result.value = null;
+}
+
 const pfxFilters = [
   { name: t("dialog.filters.pfx"), extensions: ["pfx", "p12"] },
   { name: t("dialog.filters.all"), extensions: ["*"] }
 ];
+
+const certOutputOptions = computed(() => [
+  { value: "merged", label: t("extract.merged") },
+  { value: "split", label: t("extract.split") }
+]);
+
+const legacyOptions = computed(() => [
+  { value: "auto", label: t("extract.legacyAuto") },
+  { value: "on", label: t("extract.legacyOn") },
+  { value: "off", label: t("extract.legacyOff") }
+]);
 
 const canRun = computed(
   () => form.pfxFile.length > 0 && form.pfxPassword.length > 0 && form.outputDir.length > 0 && !busy.value
@@ -41,6 +66,28 @@ const canRun = computed(
 const hasUncertain = computed(
   () => result.value?.warnings?.some((w) => w.code === "LEGACY_MODE_UNCERTAIN") ?? false
 );
+
+const inlineStatus = computed(() => {
+  if (busy.value) return t("extract.statusExtracting");
+  if (result.value?.success) return t("extract.statusSuccess");
+  if (result.value && !result.value.success) return t("extract.statusError");
+  return "";
+});
+
+async function pickPfx() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: pfxFilters,
+    title: t("dialog.selectPfx")
+  });
+  if (picked && picked[0]) form.pfxFile = picked[0];
+}
+
+async function pickOutputDir() {
+  const picked = await window.electronAPI.openDirectoryDialog({
+    title: t("dialog.selectOutputDir")
+  });
+  if (picked) form.outputDir = picked;
+}
 
 async function run() {
   if (busy.value) return;
@@ -65,98 +112,83 @@ async function run() {
 
 <template>
   <section class="page">
-    <h2>{{ t("extract.pageTitle") }}</h2>
-
-    <div class="grid">
-      <FileSelector
-        v-model="form.pfxFile"
-        :label="t('extract.pfxFile')"
-        :filters="pfxFilters"
-        :title="t('dialog.selectPfx')"
-        :disabled="busy"
-      />
-      <PasswordInput
-        v-model="form.pfxPassword"
-        :label="t('extract.pfxPassword')"
-        :disabled="busy"
-      />
-      <FileSelector
-        v-model="form.outputDir"
-        :label="t('extract.outputDir')"
-        :title="t('dialog.selectOutputDir')"
-        mode="directory"
-        :disabled="busy"
-      />
-
-      <div class="field">
-        <label class="label">{{ t("extract.certOutputMode") }}</label>
-        <div class="radios">
-          <label class="radio">
-            <input type="radio" v-model="form.certOutputMode" value="merged" :disabled="busy" />
-            {{ t("extract.merged") }}
-          </label>
-          <label class="radio">
-            <input type="radio" v-model="form.certOutputMode" value="split" :disabled="busy" />
-            {{ t("extract.split") }}
-          </label>
-        </div>
+    <header class="page-head">
+      <div class="head-main">
+        <h1>{{ t("extract.pageTitle") }}</h1>
+        <div class="crumb">{{ t("extract.crumb") }}</div>
       </div>
-
-      <div class="field full">
-        <label class="label">{{ t("extract.legacyMode") }}</label>
-        <div class="radios">
-          <label class="radio">
-            <input type="radio" v-model="form.legacyMode" value="auto" :disabled="busy" />
-            {{ t("extract.legacyAuto") }}
-          </label>
-          <label class="radio">
-            <input type="radio" v-model="form.legacyMode" value="on" :disabled="busy" />
-            {{ t("extract.legacyOn") }}
-          </label>
-          <label class="radio">
-            <input type="radio" v-model="form.legacyMode" value="off" :disabled="busy" />
-            {{ t("extract.legacyOff") }}
-          </label>
-        </div>
-        <p class="hint">{{ t("extract.legacyHint") }}</p>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button type="button" class="btn primary" :disabled="!canRun" @click="run">
-        {{ busy ? t("common.loading") : t("extract.extractButton") }}
+      <button type="button" class="btn btn-reset" :title="t('common.reset')" @click="resetAll">
+        <Icon name="refresh" :size="14" />
+        {{ t("common.reset") }}
       </button>
-    </div>
+    </header>
 
-    <div v-if="hasUncertain" class="uncertain">
+    <Card :title="t('common.source')">
+      <Row :label="t('extract.pfxFile')" required>
+        <FileField
+          :modelValue="form.pfxFile"
+          @update:modelValue="(v: string) => (form.pfxFile = v)"
+          @browse="pickPfx"
+        />
+      </Row>
+      <Row :label="t('extract.pfxPassword')" required>
+        <PasswordField
+          :modelValue="form.pfxPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.pfxPassword = v)"
+        />
+      </Row>
+    </Card>
+
+    <Card :title="t('common.output')">
+      <Row :label="t('extract.outputDir')" required>
+        <FileField
+          :modelValue="form.outputDir"
+          dir
+          @update:modelValue="(v: string) => (form.outputDir = v)"
+          @browse="pickOutputDir"
+        />
+      </Row>
+      <Row :label="t('extract.certOutputMode')">
+        <Segmented
+          :modelValue="form.certOutputMode"
+          :options="certOutputOptions"
+          @update:modelValue="(v: string) => (form.certOutputMode = v as CertOutputMode)"
+        />
+      </Row>
+      <Row :label="t('extract.legacyMode')" stack :hint="t('extract.legacyHint')">
+        <select
+          class="select legacy-select"
+          :value="form.legacyMode"
+          @change="(e) => (form.legacyMode = (e.target as HTMLSelectElement).value as LegacyMode)"
+        >
+          <option v-for="opt in legacyOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </Row>
+      <template #foot>
+        <button type="button" class="btn primary" :disabled="!canRun" @click="run">
+          {{ busy ? t("common.loading") : t("extract.extractButton") }}
+        </button>
+        <span v-if="inlineStatus" class="inline-status" :class="{ success: result?.success, error: result && !result.success }">{{ inlineStatus }}</span>
+        <span class="spacer-flex" />
+      </template>
+    </Card>
+
+    <Alert v-if="hasUncertain" kind="warn">
       {{ t("warning.LEGACY_MODE_UNCERTAIN") }}
-    </div>
+    </Alert>
 
     <ResultDisplay :result="result" />
   </section>
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 16px; }
-h2 { margin: 0; font-size: 1.25rem; color: #0f172a; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field.full { grid-column: 1 / -1; }
-.label { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
-.radios { display: flex; gap: 16px; flex-wrap: wrap; }
-.radio { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
-.hint { margin: 2px 0 0; color: #64748b; font-size: 0.82rem; }
-.actions { display: flex; gap: 10px; margin-top: 6px; }
-.btn {
-  padding: 8px 18px; border-radius: 6px; border: 1px solid #cbd5e1;
-  background: #f8fafc; cursor: pointer; font-size: 0.95rem;
+.page { display: flex; flex-direction: column; }
+.inline-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
 }
-.btn:hover:not(:disabled) { background: #e2e8f0; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #2563eb; border-color: #2563eb; color: white; }
-.btn.primary:hover:not(:disabled) { background: #1d4ed8; }
-.uncertain {
-  padding: 10px 14px; background: #fef3c7; border: 1px solid #fde68a;
-  border-radius: 8px; color: #92400e; font-size: 0.9rem;
-}
+.inline-status.success { color: var(--ok-ink); }
+.inline-status.error { color: var(--err-ink); }
 </style>

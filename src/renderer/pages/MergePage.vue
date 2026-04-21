@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import FileSelector from "../components/FileSelector.vue";
-import PasswordInput from "../components/PasswordInput.vue";
+import Card from "../components/Card.vue";
+import Row from "../components/Row.vue";
+import FileField from "../components/FileField.vue";
+import MultiFileField from "../components/MultiFileField.vue";
+import PasswordField from "../components/PasswordField.vue";
 import WarningDialog from "../components/WarningDialog.vue";
 import ResultDisplay from "../components/ResultDisplay.vue";
+import Icon from "../components/Icon.vue";
 import { useHandoff } from "../stores/handoff";
 import type {
   MergePrecheckResult,
@@ -16,15 +20,6 @@ import type {
 
 const { t } = useI18n();
 const { navigate } = useHandoff();
-
-function handoffToJks() {
-  if (!form.outputFile || !form.exportPassword) return;
-  navigate("jksFromP12", {
-    target: "jksFromP12",
-    pfxFile: form.outputFile,
-    pfxPassword: form.exportPassword
-  });
-}
 
 type State =
   | "idle"
@@ -67,6 +62,11 @@ const pfxFilters = [
   { name: t("dialog.filters.all"), extensions: ["*"] }
 ];
 
+const algorithmOptions = computed(() => [
+  { value: "AES-256-CBC", label: t("merge.algorithmAes") },
+  { value: "PBE-SHA1-3DES", label: t("merge.algorithmLegacy") }
+]);
+
 const canPrecheck = computed(
   () =>
     form.privateKeyFile.length > 0 &&
@@ -79,6 +79,57 @@ const canPrecheck = computed(
 
 const busy = computed(() => state.value === "prechecking" || state.value === "merging");
 
+const canHandoffJks = computed(
+  () => state.value === "success" && !!form.outputFile && !!form.exportPassword
+);
+
+const canRollback = computed(() => state.value !== "idle");
+
+const inlineStatus = computed(() => {
+  switch (state.value) {
+    case "prechecking": return t("merge.statusPrechecking");
+    case "merging": return t("merge.statusMerging");
+    case "success": return t("merge.statusSuccess");
+    case "error": return t("merge.statusError");
+    default: return "";
+  }
+});
+
+async function pickPrivateKey() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: keyFilters,
+    title: t("dialog.selectPrivateKey")
+  });
+  if (picked && picked[0]) form.privateKeyFile = picked[0];
+}
+
+async function pickServerCert() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: certFilters,
+    title: t("dialog.selectCert")
+  });
+  if (picked && picked[0]) form.serverCertFile = picked[0];
+}
+
+async function pickChain() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: chainFilters,
+    multiSelect: true,
+    title: t("dialog.selectChain")
+  });
+  if (!picked || picked.length === 0) return;
+  form.chainCertFiles = Array.from(new Set([...form.chainCertFiles, ...picked]));
+}
+
+async function pickOutput() {
+  const picked = await window.electronAPI.saveFileDialog({
+    filters: pfxFilters,
+    defaultName: "output.pfx",
+    title: t("dialog.selectOutput")
+  });
+  if (picked) form.outputFile = picked;
+}
+
 async function runPrecheck() {
   if (state.value === "prechecking" || state.value === "merging") return;
   result.value = null;
@@ -90,7 +141,7 @@ async function runPrecheck() {
       privateKeyFile: form.privateKeyFile,
       privateKeyPassword: form.privateKeyPassword || undefined,
       serverCertFile: form.serverCertFile,
-      chainCertFiles: form.chainCertFiles
+      chainCertFiles: [...form.chainCertFiles]
     });
     if (!res.success) {
       result.value = res;
@@ -124,9 +175,9 @@ async function executeMerge(confirmedCodes: WarningCode[]) {
       privateKeyFile: form.privateKeyFile,
       privateKeyPassword: form.privateKeyPassword || undefined,
       serverCertFile: form.serverCertFile,
-      chainCertFiles: form.chainCertFiles,
+      chainCertFiles: [...form.chainCertFiles],
       precheckToken: precheck.value.precheckToken,
-      confirmedWarningCodes: confirmedCodes,
+      confirmedWarningCodes: [...confirmedCodes],
       exportPassword: form.exportPassword,
       algorithm: form.algorithm,
       outputFile: form.outputFile
@@ -155,77 +206,118 @@ function reset() {
   precheck.value = null;
   warnings.value = [];
 }
+
+function resetAll() {
+  form.privateKeyFile = "";
+  form.privateKeyPassword = "";
+  form.serverCertFile = "";
+  form.chainCertFiles = [];
+  form.exportPassword = "";
+  form.algorithm = "AES-256-CBC";
+  form.outputFile = "";
+  warningVisible.value = false;
+  reset();
+}
+
+function handoffToJks() {
+  if (!form.outputFile || !form.exportPassword) return;
+  navigate("jksFromP12", {
+    target: "jksFromP12",
+    pfxFile: form.outputFile,
+    pfxPassword: form.exportPassword
+  });
+}
 </script>
 
 <template>
   <section class="page">
-    <h2>{{ t("merge.pageTitle") }}</h2>
-
-    <div class="grid">
-      <FileSelector
-        v-model="form.privateKeyFile"
-        :label="t('merge.privateKey')"
-        :filters="keyFilters"
-        :title="t('dialog.selectPrivateKey')"
-        :disabled="busy"
-      />
-      <PasswordInput
-        v-model="form.privateKeyPassword"
-        :label="t('merge.privateKeyPassword')"
-        :hint="t('merge.privateKeyPasswordHint')"
-        optional
-        :disabled="busy"
-      />
-
-      <FileSelector
-        v-model="form.serverCertFile"
-        :label="t('merge.serverCert')"
-        :filters="certFilters"
-        :title="t('dialog.selectCert')"
-        :disabled="busy"
-      />
-      <FileSelector
-        v-model="form.chainCertFiles"
-        :label="t('merge.chainCerts')"
-        :filters="chainFilters"
-        :title="t('dialog.selectChain')"
-        multiple
-        :disabled="busy"
-      />
-
-      <PasswordInput
-        v-model="form.exportPassword"
-        :label="t('merge.exportPassword')"
-        :disabled="busy"
-      />
-
-      <div class="field">
-        <label class="label">{{ t("merge.algorithm") }}</label>
-        <select v-model="form.algorithm" class="select" :disabled="busy">
-          <option value="AES-256-CBC">{{ t("merge.algorithmAes") }}</option>
-          <option value="PBE-SHA1-3DES">{{ t("merge.algorithmLegacy") }}</option>
-        </select>
+    <header class="page-head">
+      <div class="head-main">
+        <h1>{{ t("merge.pageTitle") }}</h1>
+        <div class="crumb">{{ t("merge.crumb") }}</div>
       </div>
-
-      <FileSelector
-        v-model="form.outputFile"
-        :label="t('merge.outputFile')"
-        :filters="pfxFilters"
-        :title="t('dialog.selectOutput')"
-        mode="save"
-        defaultName="output.pfx"
-        :disabled="busy"
-      />
-    </div>
-
-    <div class="actions">
-      <button type="button" class="btn primary" :disabled="!canPrecheck" @click="runPrecheck">
-        {{ state === "prechecking" ? t("common.loading") : t("merge.precheckButton") }}
+      <button type="button" class="btn btn-reset" :title="t('common.reset')" @click="resetAll">
+        <Icon name="refresh" :size="14" />
+        {{ t("common.reset") }}
       </button>
-      <button type="button" class="btn" :disabled="busy" @click="reset">
-        {{ t("common.cancel") }}
-      </button>
-    </div>
+    </header>
+
+    <Card :title="t('common.source')">
+      <Row :label="t('merge.privateKey')" required>
+        <FileField
+          :modelValue="form.privateKeyFile"
+          @update:modelValue="(v: string) => (form.privateKeyFile = v)"
+          @browse="pickPrivateKey"
+        />
+      </Row>
+      <Row :label="t('merge.privateKeyPassword')" optional :hint="t('merge.privateKeyPasswordHint')">
+        <PasswordField
+          :modelValue="form.privateKeyPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.privateKeyPassword = v)"
+        />
+      </Row>
+      <Row :label="t('merge.serverCert')" required>
+        <FileField
+          :modelValue="form.serverCertFile"
+          @update:modelValue="(v: string) => (form.serverCertFile = v)"
+          @browse="pickServerCert"
+        />
+      </Row>
+      <Row :label="t('merge.chainCerts')" stack :hint="t('merge.chainCertsHint')">
+        <MultiFileField
+          :modelValue="form.chainCertFiles"
+          @update:modelValue="(v: string[]) => (form.chainCertFiles = v)"
+          @browse="pickChain"
+        />
+      </Row>
+    </Card>
+
+    <Card :title="t('common.output')">
+      <Row :label="t('merge.exportPassword')" required>
+        <PasswordField
+          :modelValue="form.exportPassword"
+          match-file
+          file-mode="save"
+          @update:modelValue="(v: string) => (form.exportPassword = v)"
+        />
+      </Row>
+      <Row :label="t('merge.algorithm')">
+        <select
+          class="select algorithm-select"
+          :value="form.algorithm"
+          @change="(e) => (form.algorithm = (e.target as HTMLSelectElement).value as Pkcs12Algorithm)"
+        >
+          <option v-for="opt in algorithmOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </Row>
+      <Row :label="t('merge.outputFile')" required>
+        <FileField
+          :modelValue="form.outputFile"
+          save-mode
+          @update:modelValue="(v: string) => (form.outputFile = v)"
+          @browse="pickOutput"
+        />
+      </Row>
+      <template #foot>
+        <button type="button" class="btn primary" :disabled="!canPrecheck" @click="runPrecheck">
+          {{ state === "prechecking" ? t("common.loading") : t("merge.precheckButton") }}
+        </button>
+        <button type="button" class="btn" :disabled="!canRollback || busy" @click="reset">
+          {{ t("common.rollback") }}
+        </button>
+        <span v-if="inlineStatus" class="inline-status" :class="state">{{ inlineStatus }}</span>
+        <span class="spacer-flex" />
+        <button
+          type="button"
+          class="btn ghost"
+          :disabled="!canHandoffJks"
+          @click="handoffToJks"
+        >
+          {{ t("merge.toJksButton") }}
+        </button>
+      </template>
+    </Card>
 
     <WarningDialog
       :warnings="warnings"
@@ -234,34 +326,17 @@ function reset() {
       @cancel="onWarningsCancel"
     />
 
-    <ResultDisplay :result="result">
-      <div v-if="result && result.success" class="followup">
-        <button type="button" class="btn" @click="handoffToJks">
-          {{ t("merge.toJksButton") }}
-        </button>
-      </div>
-    </ResultDisplay>
+    <ResultDisplay :result="result" />
   </section>
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 16px; }
-h2 { margin: 0; font-size: 1.25rem; color: #0f172a; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
-.field { display: flex; flex-direction: column; gap: 6px; }
-.label { font-weight: 600; font-size: 0.92rem; color: #1e293b; }
-.select {
-  padding: 7px 10px; border-radius: 6px; border: 1px solid #cbd5e1;
-  background: white; font-size: 0.92rem;
+.page { display: flex; flex-direction: column; }
+.inline-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
 }
-.actions { display: flex; gap: 10px; margin-top: 6px; }
-.btn {
-  padding: 8px 18px; border-radius: 6px; border: 1px solid #cbd5e1;
-  background: #f8fafc; cursor: pointer; font-size: 0.95rem;
-}
-.btn:hover:not(:disabled) { background: #e2e8f0; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #2563eb; border-color: #2563eb; color: white; }
-.btn.primary:hover:not(:disabled) { background: #1d4ed8; }
-.followup { margin-top: 12px; }
+.inline-status.success { color: var(--ok-ink); }
+.inline-status.error { color: var(--err-ink); }
 </style>

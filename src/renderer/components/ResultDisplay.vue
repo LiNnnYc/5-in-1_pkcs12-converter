@@ -1,14 +1,26 @@
 <script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ref, onMounted } from "vue";
+import Alert from "./Alert.vue";
+import Icon from "./Icon.vue";
 import type { OperationResult } from "../../types";
 
-defineProps<{
+const props = defineProps<{
   result: OperationResult | null;
 }>();
 
 const { t } = useI18n();
 const sessionId = ref<string>("");
+const rootEl = ref<HTMLElement | null>(null);
+
+watch(
+  () => props.result,
+  async (r) => {
+    if (!r) return;
+    await nextTick();
+    rootEl.value?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+);
 
 onMounted(async () => {
   try {
@@ -18,53 +30,69 @@ onMounted(async () => {
   }
 });
 
-function translateMessage(msg: string): string {
-  if (!msg) return "";
-  if (msg.startsWith("error.") || msg.startsWith("common.")) {
-    return t(msg);
-  }
-  return msg;
+const translatedMessage = computed(() => {
+  const m = props.result?.message ?? "";
+  if (!m) return "";
+  if (m.startsWith("error.") || m.startsWith("common.")) return t(m);
+  return m;
+});
+
+const revealTarget = computed(() => {
+  const files = props.result?.outputFiles;
+  return files && files.length > 0 ? files[0] : "";
+});
+
+function reveal() {
+  if (!revealTarget.value) return;
+  window.electronAPI.revealPath(revealTarget.value);
 }
 </script>
 
 <template>
-  <section v-if="result" class="result" :class="result.success ? 'ok' : 'fail'">
-    <header class="head">
-      <span class="icon">{{ result.success ? "✓" : "✕" }}</span>
-      <h3>{{ result.success ? t("common.success") : t("common.failure") }}</h3>
-    </header>
-    <p class="msg">{{ translateMessage(result.message) }}</p>
+  <section v-if="result" ref="rootEl" class="result">
+    <Alert :kind="result.success ? 'ok' : 'err'" :title="result.success ? t('common.success') : t('common.failure')">
+      <div class="msg">{{ translatedMessage }}</div>
 
-    <div v-if="result.outputFiles && result.outputFiles.length" class="files">
-      <p class="label">Output:</p>
-      <ul>
-        <li v-for="f in result.outputFiles" :key="f" class="path">{{ f }}</li>
-      </ul>
+      <div v-if="result.outputFiles && result.outputFiles.length" class="files">
+        <ul>
+          <li v-for="f in result.outputFiles" :key="f" class="path">{{ f }}</li>
+        </ul>
+      </div>
+
+      <p v-if="!result.success && sessionId" class="session">
+        {{ t("common.reportSession", { id: sessionId }) }}
+      </p>
+    </Alert>
+
+    <div v-if="result.success && revealTarget" class="actions">
+      <button type="button" class="btn sm" @click="reveal">
+        <Icon name="folder" :size="14" />
+        {{ t("common.openOutputDir") }}
+      </button>
+      <slot name="actions" />
     </div>
-
-    <p v-if="!result.success && sessionId" class="session">{{ t("common.reportSession", { id: sessionId }) }}</p>
+    <div v-else-if="$slots.actions" class="actions">
+      <slot name="actions" />
+    </div>
 
     <slot />
   </section>
 </template>
 
 <style scoped>
-.result {
-  margin-top: 18px; padding: 16px 18px; border-radius: 10px; border: 1px solid;
+.result { margin-top: 14px; padding-bottom: 12px; display: flex; flex-direction: column; gap: 10px; }
+.msg { margin: 0 0 4px; font-size: 12.5px; }
+.files ul { margin: 4px 0 0; padding-left: 16px; }
+.path { font-family: var(--font-mono, Consolas, monospace); font-size: 12px; word-break: break-all; }
+.session { margin: 8px 0 0; font-size: 11.5px; opacity: 0.78; font-family: var(--font-mono, Consolas, monospace); }
+.actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
 }
-.result.ok { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
-.result.fail { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
-.head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.icon {
-  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-  font-weight: 700; color: white;
+.actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.ok .icon { background: #10b981; }
-.fail .icon { background: #ef4444; }
-h3 { margin: 0; font-size: 1rem; }
-.msg { margin: 0 0 8px; font-size: 0.92rem; }
-.files .label { margin: 8px 0 4px; font-weight: 600; font-size: 0.85rem; }
-.files ul { margin: 0; padding-left: 16px; }
-.path { font-family: Consolas, monospace; font-size: 0.85rem; word-break: break-all; }
-.session { margin: 10px 0 0; font-size: 0.8rem; opacity: 0.75; font-family: Consolas, monospace; }
 </style>

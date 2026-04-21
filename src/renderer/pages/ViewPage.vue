@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import FileSelector from "../components/FileSelector.vue";
-import PasswordInput from "../components/PasswordInput.vue";
-import ResultDisplay from "../components/ResultDisplay.vue";
-import CertificateCard from "../components/CertificateCard.vue";
-import KeyInfoCard from "../components/KeyInfoCard.vue";
+import Card from "../components/Card.vue";
+import Row from "../components/Row.vue";
+import FileField from "../components/FileField.vue";
+import PasswordField from "../components/PasswordField.vue";
+import Badge from "../components/Badge.vue";
+import Alert from "../components/Alert.vue";
+import CertDetail from "../components/CertDetail.vue";
+import Icon from "../components/Icon.vue";
 import type { OperationResult, Pkcs12ViewResult } from "../../types";
 
 const { t } = useI18n();
@@ -17,6 +20,7 @@ const form = reactive({
 
 const busy = ref(false);
 const result = ref<OperationResult<Pkcs12ViewResult> | null>(null);
+const openChainIdx = ref<Record<number, boolean>>({});
 
 const pfxFilters = [
   { name: t("dialog.filters.pfx"), extensions: ["pfx", "p12"] },
@@ -32,9 +36,32 @@ const view = computed<Pkcs12ViewResult | null>(() => {
   return null;
 });
 
+const inlineStatus = computed(() => {
+  if (busy.value) return t("view.statusViewing");
+  if (result.value?.success) return t("view.statusSuccess");
+  if (result.value && !result.value.success) return t("view.statusError");
+  return "";
+});
+
+const failMessage = computed(() => {
+  const m = result.value?.message ?? "";
+  if (!m) return "";
+  if (m.startsWith("error.") || m.startsWith("common.")) return t(m);
+  return m;
+});
+
+async function pickPfx() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: pfxFilters,
+    title: t("dialog.selectPfx")
+  });
+  if (picked && picked[0]) form.pfxFile = picked[0];
+}
+
 async function run() {
   if (busy.value) return;
   result.value = null;
+  openChainIdx.value = {};
   busy.value = true;
   try {
     const res = await window.electronAPI.viewPkcs12({
@@ -48,81 +75,192 @@ async function run() {
     busy.value = false;
   }
 }
+
+function toggleChain(i: number) {
+  openChainIdx.value = { ...openChainIdx.value, [i]: !openChainIdx.value[i] };
+}
+
+function resetAll() {
+  form.pfxFile = "";
+  form.pfxPassword = "";
+  result.value = null;
+  openChainIdx.value = {};
+}
 </script>
 
 <template>
   <section class="page">
-    <h2>{{ t("view.pageTitle") }}</h2>
-
-    <div class="grid">
-      <FileSelector
-        v-model="form.pfxFile"
-        :label="t('extract.pfxFile')"
-        :filters="pfxFilters"
-        :title="t('dialog.selectPfx')"
-        :disabled="busy"
-      />
-      <PasswordInput
-        v-model="form.pfxPassword"
-        :label="t('extract.pfxPassword')"
-        :disabled="busy"
-      />
-    </div>
-
-    <div class="actions">
-      <button type="button" class="btn primary" :disabled="!canRun" @click="run">
-        {{ busy ? t("common.loading") : t("view.viewButton") }}
+    <header class="page-head">
+      <div class="head-main">
+        <h1>{{ t("view.pageTitle") }}</h1>
+        <div class="crumb">{{ t("view.crumb") }}</div>
+      </div>
+      <button type="button" class="btn btn-reset" :title="t('common.reset')" @click="resetAll">
+        <Icon name="refresh" :size="14" />
+        {{ t("common.reset") }}
       </button>
-    </div>
+    </header>
 
-    <ResultDisplay v-if="result && !result.success" :result="result" />
+    <Card :title="t('common.source')">
+      <Row :label="t('extract.pfxFile')" required>
+        <FileField
+          :modelValue="form.pfxFile"
+          @update:modelValue="(v: string) => (form.pfxFile = v)"
+          @browse="pickPfx"
+        />
+      </Row>
+      <Row :label="t('extract.pfxPassword')" required>
+        <PasswordField
+          :modelValue="form.pfxPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.pfxPassword = v)"
+        />
+      </Row>
+      <template #foot>
+        <button type="button" class="btn primary" :disabled="!canRun" @click="run">
+          {{ busy ? t("common.loading") : t("view.viewButton") }}
+        </button>
+        <span
+          v-if="inlineStatus"
+          class="inline-status"
+          :class="{ success: result?.success, error: result && !result.success }"
+        >{{ inlineStatus }}</span>
+        <span class="spacer-flex" />
+      </template>
+    </Card>
 
-    <div v-if="view" class="view">
-      <section class="block">
-        <h3>{{ t("view.sections.privateKey") }}</h3>
-        <KeyInfoCard v-if="view.privateKey" :key-info="view.privateKey" />
-        <p v-else class="empty">{{ t("view.sections.noPrivateKey") }}</p>
-      </section>
+    <Alert v-if="result && !result.success" kind="err" :title="t('common.failure')">
+      {{ failMessage }}
+    </Alert>
 
-      <section v-if="view.serverCert" class="block">
-        <h3>{{ t("view.sections.serverCert") }}</h3>
-        <CertificateCard :cert="view.serverCert" :title="t('view.sections.serverCert')" />
-      </section>
+    <template v-if="view">
+      <Card :title="t('view.sections.privateKey')">
+        <template v-if="view.privateKey">
+          <div class="key-row">
+            <Badge kind="ok">{{ view.privateKey.algorithm }}</Badge>
+            <span class="mono">{{ view.privateKey.keySize }} bits</span>
+            <Badge :kind="view.privateKey.encrypted ? 'warn' : 'neutral'">
+              {{ view.privateKey.encrypted ? t("key.encryptedYes") : t("key.encryptedNo") }}
+            </Badge>
+          </div>
+          <Row v-if="view.privateKey.publicKeySha256" :label="t('key.publicKeySha256')" stack>
+            <span class="mono fp">{{ view.privateKey.publicKeySha256 }}</span>
+          </Row>
+        </template>
+        <div v-else class="empty">{{ t("view.sections.noPrivateKey") }}</div>
+      </Card>
 
-      <section class="block">
-        <h3>{{ t("view.sections.chainCerts") }}</h3>
+      <Card v-if="view.serverCert" :title="t('view.sections.serverCert')">
+        <CertDetail :cert="view.serverCert" />
+      </Card>
+
+      <Card :title="t('view.sections.chainCerts')">
         <div v-if="view.chainCerts.length" class="chain-list">
-          <CertificateCard
+          <div
             v-for="(c, i) in view.chainCerts"
             :key="i"
-            :cert="c"
-            :title="`#${i + 1} · ${c.subject}`"
-            :default-open="false"
-            collapsible
-          />
+            class="chain-item"
+            :class="{ open: openChainIdx[i] }"
+          >
+            <button
+              type="button"
+              class="chain-head"
+              :aria-expanded="!!openChainIdx[i]"
+              @click="toggleChain(i)"
+            >
+              <span class="caret">{{ openChainIdx[i] ? "▾" : "▸" }}</span>
+              <span class="chain-title">#{{ i + 1 }} · {{ c.subject }}</span>
+              <span class="chain-hint">
+                {{ openChainIdx[i] ? t("view.collapseHint") : t("view.expandHint") }}
+              </span>
+            </button>
+            <div v-if="openChainIdx[i]" class="chain-body">
+              <CertDetail :cert="c" />
+            </div>
+          </div>
         </div>
-        <p v-else class="empty">{{ t("view.sections.noChain") }}</p>
-      </section>
-    </div>
+        <div v-else class="empty">{{ t("view.sections.noChain") }}</div>
+      </Card>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 16px; }
-h2 { margin: 0; font-size: 1.25rem; color: #0f172a; }
-h3 { margin: 0 0 10px; font-size: 1rem; color: #1e293b; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
-.actions { display: flex; gap: 10px; margin-top: 6px; }
-.btn {
-  padding: 8px 18px; border-radius: 6px; border: 1px solid #cbd5e1;
-  background: #f8fafc; cursor: pointer; font-size: 0.95rem;
+.page { display: flex; flex-direction: column; }
+.inline-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
 }
-.btn:hover:not(:disabled) { background: #e2e8f0; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #2563eb; border-color: #2563eb; color: white; }
-.btn.primary:hover:not(:disabled) { background: #1d4ed8; }
-.view { display: flex; flex-direction: column; gap: 18px; margin-top: 8px; }
-.block { display: flex; flex-direction: column; }
-.chain-list { display: flex; flex-direction: column; gap: 10px; }
-.empty { margin: 0; color: #94a3b8; font-size: 0.9rem; }
+.inline-status.success { color: var(--ok-ink); }
+.inline-status.error { color: var(--err-ink); }
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+.key-row .mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.fp {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  word-break: break-all;
+}
+
+.empty {
+  padding: 12px 14px;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.chain-list { display: flex; flex-direction: column; }
+.chain-item { border-top: 1px solid #e5ebf2; }
+.chain-item:first-child { border-top: none; }
+.chain-head {
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: none;
+  background: #eef2f7;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  transition: background 0.12s ease;
+}
+.chain-head:hover { background: #e3e9f1; }
+.chain-item.open .chain-head {
+  background: #dde6f1;
+  border-bottom: 1px solid #c9d4e2;
+}
+.chain-head .caret { color: var(--muted); width: 10px; }
+.chain-head .chain-title {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+}
+.chain-head .chain-hint {
+  flex-shrink: 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-style: italic;
+}
+.chain-body {
+  background: #ffffff;
+  padding: 4px 0;
+}
 </style>

@@ -147,13 +147,12 @@ export function buildChain(
   const usedSet = new Set(chain);
   const unrelated = pool.filter((c) => !usedSet.has(c));
 
-  // Linked iff (a) chain terminates at self-signed anchor, or (b) chain's top
-  // cert has no AKI (i.e. caller supplied a partial chain on purpose and the
-  // top is a trust anchor or intermediate whose parent lives in the system
-  // trust store). For M1 we treat "top cert has no parent in the pool AND is
-  // not self-signed AND has an AKI" as NOT_LINKED.
-  const top = chain[chain.length - 1];
-  const linked = isSelfSigned(top) || !top.info.authorityKeyIdentifier;
+  // Linked iff the server cert connected to at least one supplied intermediate,
+  // OR the caller supplied no chain pool at all (nothing to link against, not
+  // our job to flag). We intentionally do NOT require the chain to reach a
+  // self-signed root — installing roots via PFX is an anti-pattern; browsers
+  // and OS trust stores own that responsibility.
+  const linked = chain.length >= 2 || pool.length === 0;
 
   return { chain, unrelated, anchor, linked };
 }
@@ -189,7 +188,7 @@ export function generateChainWarnings(
   }
 
   if (!buildResult.linked) {
-    push("CHAIN_NOT_LINKED", "Chain could not be fully linked to a trust anchor");
+    push("CHAIN_NOT_LINKED", "Server certificate could not be linked to any supplied intermediate");
   }
 
   // Reorder detection: compare order of `chain[1..]` (intermediates/anchor) to

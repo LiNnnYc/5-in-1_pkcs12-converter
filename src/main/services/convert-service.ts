@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from "node:fs";
 import type {
+  AliasEntry,
   JksToP12Request,
   P12ToJksRequest,
   ListAliasesRequest,
@@ -7,9 +8,10 @@ import type {
   OperationWarning
 } from "../../types";
 import { validateFilePath, validateOutputPath, validatePassword, validateKeystorePassword } from "../utils/sanitizer";
-import { listAliases, runKeytool } from "../engines/keytool-runner";
+import { listAliases, listAliasEntries, runKeytool } from "../engines/keytool-runner";
 import { runOpenssl } from "../engines/openssl-runner";
 import { classifyError } from "../engines/output-parser";
+import { mapError } from "./error-mapper";
 import { createLogger } from "../utils/logger";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
@@ -28,7 +30,7 @@ function clearOutput(path: string): void {
 
 export async function listKeystoreAliases(
   params: ListAliasesRequest
-): Promise<OperationResult<{ aliases: string[] }>> {
+): Promise<OperationResult<{ aliases: AliasEntry[] }>> {
   const f = validateFilePath(params.keystoreFile);
   if (!f.ok) {
     log.warn("listAliases: invalid input", { field: "keystoreFile", reason: f.reason });
@@ -41,12 +43,21 @@ export async function listKeystoreAliases(
   }
 
   try {
-    const aliases = await listAliases(params.keystoreFile, params.keystorePassword, params.storeType);
-    log.info("listAliases done", { keystore: params.keystoreFile, storeType: params.storeType, count: aliases.length });
+    const aliases = await listAliasEntries(params.keystoreFile, params.keystorePassword, params.storeType);
+    log.info("listAliases done", {
+      keystore: params.keystoreFile,
+      storeType: params.storeType,
+      count: aliases.length,
+      types: aliases.map((a) => a.entryType)
+    });
     return { success: true, message: "common.aliasesListed", details: { aliases } };
   } catch (err) {
     log.error("listAliases failed", { keystore: params.keystoreFile }, err);
-    return { success: false, message: "error.listAliasesFailed" };
+    const mapped = mapError((err as Error).message);
+    // Surface password-incorrect (and other specific causes) straight through;
+    // fall back to the generic list-aliases error only for genuinely unknown cases.
+    const key = mapped.i18nKey === "error.unknown" ? "error.listAliasesFailed" : mapped.i18nKey;
+    return { success: false, message: key };
   }
 }
 
@@ -70,7 +81,9 @@ export async function jksToP12(params: JksToP12Request): Promise<OperationResult
     aliases = await listAliases(params.jksFile, params.jksPassword, "JKS");
   } catch (err) {
     log.error("jksToP12 alias probe failed", { jks: params.jksFile }, err);
-    return { success: false, message: "error.listAliasesFailed", details: { error: (err as Error).message } };
+    const mapped = mapError((err as Error).message);
+    const key = mapped.i18nKey === "error.unknown" ? "error.listAliasesFailed" : mapped.i18nKey;
+    return { success: false, message: key, details: { error: (err as Error).message } };
   }
 
   if (aliases.length === 0) {
@@ -263,7 +276,9 @@ async function convertP12ToJksWithSource(
     srcAliases = await listAliases(activePfxFile, params.pfxPassword, "PKCS12");
   } catch (err) {
     log.error("p12ToJks alias probe failed", { pfx: activePfxFile }, err);
-    return { success: false, message: "error.listAliasesFailed", details: { error: (err as Error).message } };
+    const mapped = mapError((err as Error).message);
+    const key = mapped.i18nKey === "error.unknown" ? "error.listAliasesFailed" : mapped.i18nKey;
+    return { success: false, message: key, details: { error: (err as Error).message } };
   }
   if (srcAliases.length === 0) {
     return { success: false, message: "error.keystoreEmpty" };

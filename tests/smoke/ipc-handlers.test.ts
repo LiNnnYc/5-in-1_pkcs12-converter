@@ -65,6 +65,7 @@ describe("IPC registration", () => {
   it("registers all M1 + M2 channels", () => {
     expect([...handlers.keys()].sort()).toEqual([
       "app:getSessionId",
+      "app:quit",
       "dialog:openDirectory",
       "dialog:openFile",
       "dialog:saveFile",
@@ -74,7 +75,8 @@ describe("IPC registration", () => {
       "pkcs12:extract",
       "pkcs12:merge",
       "pkcs12:merge:precheck",
-      "pkcs12:view"
+      "pkcs12:view",
+      "shell:revealPath"
     ]);
   });
 });

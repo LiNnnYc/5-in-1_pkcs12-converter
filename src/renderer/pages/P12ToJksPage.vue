@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onActivated, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import FileSelector from "../components/FileSelector.vue";
-import PasswordInput from "../components/PasswordInput.vue";
+import Card from "../components/Card.vue";
+import Row from "../components/Row.vue";
+import FileField from "../components/FileField.vue";
+import PasswordField from "../components/PasswordField.vue";
 import AliasPicker from "../components/AliasPicker.vue";
 import ResultDisplay from "../components/ResultDisplay.vue";
+import Icon from "../components/Icon.vue";
 import { useHandoff } from "../stores/handoff";
 import type { OperationResult } from "../../types";
 
@@ -25,8 +28,6 @@ const state = ref<State>("idle");
 const aliases = ref<string[]>([]);
 const result = ref<OperationResult | null>(null);
 
-// Cached alias list is stale once the PFX input changes — reset so the user
-// can't submit against a different keystore than they last listed.
 watch([() => form.pfxFile, () => form.pfxPassword], () => {
   if (state.value === "picking" || state.value === "error" || state.value === "success") {
     aliases.value = [];
@@ -36,7 +37,7 @@ watch([() => form.pfxFile, () => form.pfxPassword], () => {
   }
 });
 
-onMounted(() => {
+onActivated(() => {
   const payload = consume("jksFromP12");
   if (payload) {
     form.pfxFile = payload.pfxFile;
@@ -55,51 +56,46 @@ const jksFilters = [
 
 const busy = computed(() => state.value === "listing" || state.value === "converting");
 
-const canListAliases = computed(
-  () => form.pfxFile.length > 0 && form.pfxPassword.length > 0 && !busy.value
-);
+const canRollback = computed(() => state.value !== "idle");
 
 const canConvert = computed(
   () =>
-    state.value === "picking" &&
-    form.alias.length > 0 &&
+    form.pfxFile.length > 0 &&
+    form.pfxPassword.length > 0 &&
     form.outputPassword.length > 0 &&
-    form.outputFile.length > 0
+    form.outputFile.length > 0 &&
+    !busy.value &&
+    (state.value !== "picking" || form.alias.length > 0)
 );
 
-async function listAliases() {
-  if (busy.value) return;
-  result.value = null;
-  aliases.value = [];
-  form.alias = "";
-  state.value = "listing";
-  try {
-    const res = await window.electronAPI.listKeystoreAliases({
-      keystoreFile: form.pfxFile,
-      keystorePassword: form.pfxPassword,
-      storeType: "PKCS12"
-    });
-    if (!res.success || !res.details) {
-      result.value = res;
-      state.value = "error";
-      return;
-    }
-    aliases.value = res.details.aliases ?? [];
-    if (aliases.value.length === 0) {
-      result.value = { success: false, message: "error.keystoreEmpty" };
-      state.value = "error";
-      return;
-    }
-    state.value = "picking";
-  } catch {
-    result.value = { success: false, message: "error.internalError" };
-    state.value = "error";
+const inlineStatus = computed(() => {
+  switch (state.value) {
+    case "listing": return t("p12ToJks.statusListing");
+    case "converting": return t("p12ToJks.statusConverting");
+    case "success": return t("p12ToJks.statusSuccess");
+    case "error": return t("p12ToJks.statusError");
+    default: return "";
   }
+});
+
+async function pickPfx() {
+  const picked = await window.electronAPI.openFileDialog({
+    filters: pfxFilters,
+    title: t("dialog.selectPfx")
+  });
+  if (picked && picked[0]) form.pfxFile = picked[0];
 }
 
-async function convert() {
-  if (busy.value) return;
-  if (state.value !== "picking") return;
+async function pickOutput() {
+  const picked = await window.electronAPI.saveFileDialog({
+    filters: jksFilters,
+    defaultName: "output.jks",
+    title: t("dialog.selectOutput")
+  });
+  if (picked) form.outputFile = picked;
+}
+
+async function doConvert() {
   state.value = "converting";
   try {
     const res = await window.electronAPI.p12ToJks({
@@ -117,70 +113,139 @@ async function convert() {
   }
 }
 
+async function convert() {
+  if (busy.value) return;
+  if (state.value === "picking" && form.alias) {
+    await doConvert();
+    return;
+  }
+  result.value = null;
+  aliases.value = [];
+  form.alias = "";
+  state.value = "listing";
+  try {
+    const res = await window.electronAPI.listKeystoreAliases({
+      keystoreFile: form.pfxFile,
+      keystorePassword: form.pfxPassword,
+      storeType: "PKCS12"
+    });
+    if (!res.success || !res.details) {
+      result.value = res;
+      state.value = "error";
+      return;
+    }
+    aliases.value = (res.details.aliases ?? []).map((a) => a.alias);
+    if (aliases.value.length === 0) {
+      result.value = { success: false, message: "error.keystoreEmpty" };
+      state.value = "error";
+      return;
+    }
+    if (aliases.value.length === 1) {
+      form.alias = aliases.value[0];
+      await doConvert();
+    } else {
+      state.value = "picking";
+    }
+  } catch {
+    result.value = { success: false, message: "error.internalError" };
+    state.value = "error";
+  }
+}
+
 function reset() {
   state.value = "idle";
   aliases.value = [];
   form.alias = "";
   result.value = null;
 }
+
+function resetAll() {
+  form.pfxFile = "";
+  form.pfxPassword = "";
+  form.outputPassword = "";
+  form.outputFile = "";
+  reset();
+}
 </script>
 
 <template>
   <section class="page">
-    <h2>{{ t("p12ToJks.pageTitle") }}</h2>
-
-    <div class="grid">
-      <FileSelector
-        v-model="form.pfxFile"
-        :label="t('p12ToJks.pfxFile')"
-        :filters="pfxFilters"
-        :title="t('dialog.selectPfx')"
-        :disabled="busy"
-      />
-      <PasswordInput
-        v-model="form.pfxPassword"
-        :label="t('p12ToJks.pfxPassword')"
-        :disabled="busy"
-      />
-      <PasswordInput
-        v-model="form.outputPassword"
-        :label="t('p12ToJks.outputPassword')"
-        :disabled="busy"
-      />
-      <FileSelector
-        v-model="form.outputFile"
-        :label="t('p12ToJks.outputFile')"
-        :filters="jksFilters"
-        :title="t('dialog.selectOutput')"
-        mode="save"
-        defaultName="output.jks"
-        :disabled="busy"
-      />
-    </div>
-
-    <p class="notice">{{ t("p12ToJks.destAliasNotice") }}</p>
-
-    <div class="actions">
-      <button
-        type="button"
-        class="btn primary"
-        :disabled="!canListAliases || state === 'picking'"
-        @click="listAliases"
-      >
-        {{ state === "listing" ? t("common.loading") : t("p12ToJks.listAliasesButton") }}
+    <header class="page-head">
+      <div class="head-main">
+        <h1>{{ t("p12ToJks.pageTitle") }}</h1>
+        <div class="crumb">{{ t("p12ToJks.crumb") }}</div>
+      </div>
+      <button type="button" class="btn btn-reset" :title="t('common.reset')" @click="resetAll">
+        <Icon name="refresh" :size="14" />
+        {{ t("common.reset") }}
       </button>
-      <button
-        type="button"
-        class="btn primary"
-        :disabled="!canConvert"
-        @click="convert"
-      >
-        {{ state === "converting" ? t("common.loading") : t("p12ToJks.convertButton") }}
-      </button>
-      <button type="button" class="btn" :disabled="busy" @click="reset">
-        {{ t("common.cancel") }}
-      </button>
-    </div>
+    </header>
+
+    <Card :title="t('common.source')">
+      <Row :label="t('p12ToJks.pfxFile')" required>
+        <FileField
+          :modelValue="form.pfxFile"
+          @update:modelValue="(v: string) => (form.pfxFile = v)"
+          @browse="pickPfx"
+        />
+      </Row>
+      <Row :label="t('p12ToJks.pfxPassword')" required>
+        <PasswordField
+          :modelValue="form.pfxPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.pfxPassword = v)"
+        />
+      </Row>
+      <template #foot>
+        <span
+          v-if="inlineStatus"
+          class="inline-status"
+          :class="state"
+        >{{ inlineStatus }}</span>
+        <span class="spacer-flex" />
+      </template>
+    </Card>
+
+    <Card :title="t('common.output')">
+      <Row :label="t('p12ToJks.outputPassword')" required>
+        <PasswordField
+          :modelValue="form.outputPassword"
+          match-file
+          file-mode="save"
+          @update:modelValue="(v: string) => (form.outputPassword = v)"
+        />
+      </Row>
+      <Row :label="t('p12ToJks.outputFile')" required>
+        <FileField
+          :modelValue="form.outputFile"
+          save-mode
+          @update:modelValue="(v: string) => (form.outputFile = v)"
+          @browse="pickOutput"
+        />
+      </Row>
+      <template #foot>
+        <button
+          type="button"
+          class="btn primary"
+          :disabled="!canConvert"
+          @click="convert"
+        >
+          {{ busy
+            ? t("common.loading")
+            : state === "picking"
+              ? t("common.continue")
+              : t("p12ToJks.convertButton") }}
+        </button>
+        <button type="button" class="btn" :disabled="!canRollback || busy" @click="reset">
+          {{ t("common.rollback") }}
+        </button>
+        <span class="spacer-flex" />
+        <span class="dest-notice">
+          <Icon name="info" :size="14" />
+          {{ t("p12ToJks.destAliasNotice") }}
+        </span>
+      </template>
+    </Card>
 
     <AliasPicker
       v-if="state === 'picking' || (state === 'converting' && aliases.length > 0)"
@@ -195,21 +260,20 @@ function reset() {
 </template>
 
 <style scoped>
-.page { display: flex; flex-direction: column; gap: 16px; }
-h2 { margin: 0; font-size: 1.25rem; color: #0f172a; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
-.notice {
-  margin: 0; padding: 8px 12px;
-  background: #eff6ff; border: 1px solid #bfdbfe;
-  border-radius: 6px; color: #1e40af; font-size: 0.88rem;
+.page { display: flex; flex-direction: column; }
+.inline-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 4px;
 }
-.actions { display: flex; gap: 10px; margin-top: 6px; }
-.btn {
-  padding: 8px 18px; border-radius: 6px; border: 1px solid #cbd5e1;
-  background: #f8fafc; cursor: pointer; font-size: 0.95rem;
+.inline-status.success { color: var(--ok-ink); }
+.inline-status.error { color: var(--err-ink); }
+.dest-notice {
+  font-size: 12px;
+  color: var(--info-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.btn:hover:not(:disabled) { background: #e2e8f0; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: #2563eb; border-color: #2563eb; color: white; }
-.btn.primary:hover:not(:disabled) { background: #1d4ed8; }
+.page :deep(.picker) { margin-top: 12px; }
 </style>

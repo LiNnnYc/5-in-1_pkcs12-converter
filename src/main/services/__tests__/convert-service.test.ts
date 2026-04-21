@@ -225,6 +225,7 @@ d("convert-service integration (keytool + openssl)", () => {
       keystoreFile: jks, keystorePassword: "listpass", storeType: "JKS"
     });
     expect(r.success).toBe(true);
-    expect(r.details?.aliases.map((a) => a.toLowerCase())).toEqual(["listed"]);
+    expect(r.details?.aliases.map((a) => a.alias.toLowerCase())).toEqual(["listed"]);
+    expect(r.details?.aliases.map((a) => a.entryType)).toEqual(["PrivateKeyEntry"]);
   });
 });

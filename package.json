@@ -1,6 +1,6 @@
 {
   "name": "pkcs12-converter",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "private": true,
   "description": "Windows desktop app for PKCS#12 merge, extract, and view workflows.",
   "main": "dist/main/index.js",

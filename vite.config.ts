@@ -3,6 +3,7 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
 export default defineConfig({
+  base: './',
   root: resolve(__dirname, "src/renderer"),
   plugins: [vue()],
   resolve: {

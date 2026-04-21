@@ -5,8 +5,8 @@ import type { ExtractRequest, LegacyMode, OperationResult, OperationWarning } fr
 import { validateFilePath, validateOutputDir, validatePassword } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
-import { runOpenssl } from "../engines/openssl-runner";
-import { classifyError, splitPemCerts } from "../engines/output-parser";
+import { runOpenssl, parseCertificateText } from "../engines/openssl-runner";
+import { classifyError, parseCertInfo, splitPemCerts } from "../engines/output-parser";
 import { createLogger } from "../utils/logger";
 
 const log = createLogger("extract");
@@ -36,6 +36,57 @@ async function probeLegacy(pfxFile: string, pfxPassword: string): Promise<Legacy
 
 function pkcs12Args(base: string[], useLegacy: boolean): string[] {
   return useLegacy ? [...base, "-legacy"] : base;
+}
+
+// Pull CN from an openssl-formatted subject line. Handles both "CN=foo,O=..."
+// and "CN = foo, O = ..." shapes, and quoted values "CN=\"foo, bar\"".
+export function extractCnFromSubject(subject: string): string | undefined {
+  const quoted = subject.match(/CN\s*=\s*"([^"]+)"/i);
+  if (quoted) return quoted[1].trim() || undefined;
+  const bare = subject.match(/CN\s*=\s*([^,/]+)/i);
+  if (!bare) return undefined;
+  return bare[1].trim() || undefined;
+}
+
+// Make a CN safe for filesystem use. Wildcards get mapped to "-" per user
+// preference; other Windows-reserved chars also become "-". Whitespace →
+// underscore. Trim to keep paths sane.
+export function sanitizeCnForFilename(cn: string): string {
+  const mapped = cn
+    .replace(/\*/g, "-")
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, "_")
+    .replace(/^\.+/, "")
+    .trim();
+  return mapped.slice(0, 80);
+}
+
+async function cnFromPemBlock(
+  block: string,
+  tmp: TempFileManager,
+  tag: string
+): Promise<string | undefined> {
+  const path = tmp.createTempFile(`cn-${tag}.pem`);
+  await writeFile(path, block.endsWith("\n") ? block : `${block}\n`, "utf8");
+  const res = await parseCertificateText(path);
+  if (res.exitCode !== 0) return undefined;
+  const info = parseCertInfo(res.stdout);
+  const cn = extractCnFromSubject(info.subject);
+  if (!cn) return undefined;
+  const sanitized = sanitizeCnForFilename(cn);
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+function uniqueName(base: string, used: Set<string>): string {
+  if (!used.has(base)) {
+    used.add(base);
+    return base;
+  }
+  let i = 2;
+  while (used.has(`${base}-${i}`)) i++;
+  const name = `${base}-${i}`;
+  used.add(name);
+  return name;
 }
 
 async function runExtract(
@@ -176,14 +227,21 @@ export async function extractPkcs12(
         outputs.push(mergedPath);
       }
     } else {
+      const usedNames = new Set<string>();
       if (serverBlocks.length > 0) {
-        const serverOut = join(params.outputDir, "server.crt");
-        await writeFile(serverOut, serverBlocks[0].endsWith("\n") ? serverBlocks[0] : `${serverBlocks[0]}\n`, "utf8");
+        const block = serverBlocks[0];
+        const cn = await cnFromPemBlock(block, tmp, "server");
+        const base = uniqueName(cn ?? "server", usedNames);
+        const serverOut = join(params.outputDir, `${base}.crt`);
+        await writeFile(serverOut, block.endsWith("\n") ? block : `${block}\n`, "utf8");
         outputs.push(serverOut);
       }
       for (let i = 0; i < caBlocks.length; i++) {
-        const caOut = join(params.outputDir, `ca-${i + 1}.crt`);
-        await writeFile(caOut, caBlocks[i].endsWith("\n") ? caBlocks[i] : `${caBlocks[i]}\n`, "utf8");
+        const block = caBlocks[i];
+        const cn = await cnFromPemBlock(block, tmp, `ca-${i}`);
+        const base = uniqueName(cn ?? `ca-${i + 1}`, usedNames);
+        const caOut = join(params.outputDir, `${base}.crt`);
+        await writeFile(caOut, block.endsWith("\n") ? block : `${block}\n`, "utf8");
         outputs.push(caOut);
       }
     }

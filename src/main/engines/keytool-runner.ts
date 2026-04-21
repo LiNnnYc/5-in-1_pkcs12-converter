@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import type { AliasEntry, AliasEntryType } from "../../types";
 import { resolveKeytoolPath } from "../utils/path-resolver";
 import { createLogger } from "../utils/logger";
 
@@ -104,6 +105,30 @@ export function parseAliasList(stdout: string): string[] {
   return aliases;
 }
 
+// Parse per-alias blocks to extract both the alias and its Entry type. Keytool
+// emits "Entry type: PrivateKeyEntry" / "trustedCertEntry" / "SecretKeyEntry"
+// per alias; we normalize capitalisation for downstream type guards.
+export function parseAliasEntries(stdout: string): AliasEntry[] {
+  const entries: AliasEntry[] = [];
+  // Split the output into per-alias chunks. The lookahead ensures each chunk
+  // starts at its "Alias name:" header so "Entry type:" lines bind correctly.
+  const chunks = stdout.split(/(?=^Alias name:)/m);
+  for (const chunk of chunks) {
+    const am = chunk.match(/^Alias name:\s*(.+?)\s*$/m);
+    if (!am) continue;
+    const em = chunk.match(/^Entry type:\s*(\S+)/mi);
+    let entryType: AliasEntryType = "Unknown";
+    if (em) {
+      const raw = em[1];
+      if (/privatekeyentry/i.test(raw)) entryType = "PrivateKeyEntry";
+      else if (/trustedcertentry/i.test(raw)) entryType = "TrustedCertEntry";
+      else if (/secretkeyentry/i.test(raw)) entryType = "SecretKeyEntry";
+    }
+    entries.push({ alias: am[1], entryType });
+  }
+  return entries;
+}
+
 export async function listAliases(
   keystore: string,
   password: string,
@@ -123,4 +148,26 @@ export async function listAliases(
     throw new Error(`keytool list failed (exit ${r.exitCode}): ${r.stderr.trim().split("\n").slice(-2).join(" | ")}`);
   }
   return parseAliasList(r.stdout);
+}
+
+// Same invocation as listAliases but returns structured {alias, entryType}.
+// Callers that need to filter by entry type (e.g. JKS→P12 should only export
+// PrivateKeyEntry aliases) use this; callers that just need names can keep
+// using listAliases.
+export async function listAliasEntries(
+  keystore: string,
+  password: string,
+  storeType: KeystoreType
+): Promise<AliasEntry[]> {
+  const args = [
+    "-list", "-rfc",
+    "-keystore", keystore,
+    "-storetype", storeType,
+    "-storepass:env", "STORE_PASSWORD"
+  ];
+  const r = await runKeytool(args, { env: { STORE_PASSWORD: password } });
+  if (r.exitCode !== 0) {
+    throw new Error(`keytool list failed (exit ${r.exitCode}): ${r.stderr.trim().split("\n").slice(-2).join(" | ")}`);
+  }
+  return parseAliasEntries(r.stdout);
 }

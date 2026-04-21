@@ -47,6 +47,8 @@ function select(alias: string) {
     </p>
     <p v-else class="hint">{{ t(`${props.labelScope}.aliasPickerHint`) }}</p>
 
+    <p v-if="isSingle" class="auto-continue">{{ t("common.autoContinue") }}</p>
+
     <ul v-if="!isSingle" class="list">
       <li v-for="alias in aliases" :key="alias">
         <label class="option" :class="{ selected: modelValue === alias }">
@@ -83,4 +85,5 @@ function select(alias: string) {
 .option:hover { background: #eff6ff; }
 .option.selected { border-color: #2563eb; background: #eff6ff; }
 .alias { font-family: Consolas, monospace; font-size: 0.9rem; color: #0f172a; }
+.auto-continue { margin: 4px 0 0; color: #64748b; font-size: 0.82rem; font-style: italic; }
 </style>

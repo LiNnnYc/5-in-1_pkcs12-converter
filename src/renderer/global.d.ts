@@ -1,4 +1,5 @@
 import type {
+  AliasEntry,
   MergePrecheckRequest,
   MergeRequest,
   ExtractRequest,
@@ -23,11 +24,13 @@ declare global {
       viewPkcs12: (params: ViewRequest) => Promise<OperationResult<Pkcs12ViewResult>>;
       jksToP12: (params: JksToP12Request) => Promise<OperationResult>;
       p12ToJks: (params: P12ToJksRequest) => Promise<OperationResult>;
-      listKeystoreAliases: (params: ListAliasesRequest) => Promise<OperationResult<{ aliases: string[] }>>;
+      listKeystoreAliases: (params: ListAliasesRequest) => Promise<OperationResult<{ aliases: AliasEntry[] }>>;
       openFileDialog: (params: OpenFileDialogRequest) => Promise<string[]>;
       saveFileDialog: (params: SaveFileDialogRequest) => Promise<string>;
       openDirectoryDialog: (params: OpenDirectoryDialogRequest) => Promise<string>;
       getSessionId: () => Promise<string>;
+      quitApp: () => Promise<void>;
+      revealPath: (path: string) => Promise<void>;
     };
   }
 }

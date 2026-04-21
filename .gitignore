@@ -11,3 +11,8 @@ release/
 *.md
 !spec.md
 
+# 無法分類的雜項
+雜項/
+templates/
+claude_design/
+

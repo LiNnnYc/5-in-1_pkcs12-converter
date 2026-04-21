@@ -19,14 +19,18 @@ type LoggerState = {
   logsDir: string;
   filePath: string | null;
   fd: number | null;
+  buffer: string[];
 };
+
+const BUFFER_CAP = 200;
 
 const state: LoggerState = {
   enabled: false,
   sessionId: "",
   logsDir: "",
   filePath: null,
-  fd: null
+  fd: null,
+  buffer: []
 };
 
 export type InitLoggerOptions = {
@@ -57,31 +61,48 @@ export function initLogger(opts: InitLoggerOptions): void {
   // Always assign sessionId (renderer can read it even if logging disabled —
   // useful for "please report" UX).
   state.sessionId = `#${randomBytes(4).toString("hex")}`;
-  state.enabled = isEnabled(opts);
   state.logsDir = join(opts.exeDir, "logs");
+  state.buffer = [];
 
-  if (!state.enabled) return;
-
-  try {
-    mkdirSync(state.logsDir, { recursive: true });
-    rotateLogs({ logsDir: state.logsDir });
-    const filename = `app-${dateStamp()}_${state.sessionId}.log`;
-    state.filePath = join(state.logsDir, filename);
-    state.fd = openSync(state.filePath, "a");
-  } catch {
-    // permission / disk full — silently disable, never block app startup.
-    state.enabled = false;
-    state.filePath = null;
-    state.fd = null;
-  }
-
-  // Top-level safety net.
+  // Always register safety-net handlers so uncaught errors trigger the
+  // buffer-flush path even when logging started disabled.
   process.on("unhandledRejection", (reason) => {
     write("error", "process", "unhandledRejection", undefined, reason);
   });
   process.on("uncaughtException", (err) => {
     write("error", "process", "uncaughtException", undefined, err);
   });
+
+  if (!isEnabled(opts)) {
+    // Disabled but armed: keep a small in-memory ring buffer; flush to a
+    // real log file only if an error actually occurs.
+    state.enabled = false;
+    return;
+  }
+
+  openLogFile();
+}
+
+function openLogFile(): boolean {
+  try {
+    mkdirSync(state.logsDir, { recursive: true });
+    rotateLogs({ logsDir: state.logsDir });
+    const filename = `app-${dateStamp()}_${state.sessionId}.log`;
+    state.filePath = join(state.logsDir, filename);
+    state.fd = openSync(state.filePath, "a");
+    state.enabled = true;
+    // Flush anything already buffered before the file existed.
+    for (const ln of state.buffer) {
+      try { writeSync(state.fd, ln); } catch { /* ignore */ }
+    }
+    state.buffer = [];
+    return true;
+  } catch {
+    state.enabled = false;
+    state.filePath = null;
+    state.fd = null;
+    return false;
+  }
 }
 
 export function getSessionId(): string {
@@ -119,21 +140,27 @@ function write(
   meta?: unknown,
   err?: unknown
 ): void {
-  if (!state.enabled || state.fd === null) return;
-  const line: Record<string, unknown> = {
+  if (!state.sessionId) return; // logger not initialized yet
+  const record: Record<string, unknown> = {
     ts: new Date().toISOString(),
     sessionId: state.sessionId,
     level,
     scope,
     msg
   };
-  if (meta !== undefined) line.meta = redact(meta);
-  if (err !== undefined) line.err = serializeError(err);
-  try {
-    writeSync(state.fd, JSON.stringify(line) + "\n");
-  } catch {
-    // ignore — disk full / fd closed shouldn't crash the app.
+  if (meta !== undefined) record.meta = redact(meta);
+  if (err !== undefined) record.err = serializeError(err);
+  const line = JSON.stringify(record) + "\n";
+
+  if (state.enabled && state.fd !== null) {
+    try { writeSync(state.fd, line); } catch { /* ignore */ }
+    return;
   }
+
+  // Buffer while disabled. On first error, open the file lazily and flush.
+  state.buffer.push(line);
+  if (state.buffer.length > BUFFER_CAP) state.buffer.shift();
+  if (level === "error") openLogFile();
 }
 
 function serializeError(err: unknown): unknown {
@@ -156,4 +183,5 @@ export function _resetForTests(): void {
   state.logsDir = "";
   state.filePath = null;
   state.fd = null;
+  state.buffer = [];
 }

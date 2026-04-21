@@ -36,6 +36,8 @@ export type ElectronAPI = {
   saveFileDialog: (params: SaveDialogOptions) => Promise<string>;
   openDirectoryDialog: (params: OpenDirectoryOptions) => Promise<string>;
   getSessionId: () => Promise<string>;
+  quitApp: () => Promise<void>;
+  revealPath: (path: string) => Promise<void>;
 };
 
 const electronAPI: ElectronAPI = {
@@ -49,7 +51,9 @@ const electronAPI: ElectronAPI = {
   openFileDialog: (params) => ipcRenderer.invoke("dialog:openFile", params),
   saveFileDialog: (params) => ipcRenderer.invoke("dialog:saveFile", params),
   openDirectoryDialog: (params) => ipcRenderer.invoke("dialog:openDirectory", params),
-  getSessionId: () => ipcRenderer.invoke("app:getSessionId")
+  getSessionId: () => ipcRenderer.invoke("app:getSessionId"),
+  quitApp: () => ipcRenderer.invoke("app:quit"),
+  revealPath: (path) => ipcRenderer.invoke("shell:revealPath", path)
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

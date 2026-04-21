@@ -17,6 +17,7 @@ export type CertificateInfo = {
   subjectKeyIdentifier?: string;
   authorityKeyIdentifier?: string;
   fingerprint: Fingerprint;
+  publicKeySha256?: string;
 };
 
 export type PrivateKeyAlgorithm = "RSA" | "EC" | "DSA" | "ED25519" | "UNKNOWN";
@@ -25,12 +26,41 @@ export type PrivateKeyInfo = {
   algorithm: PrivateKeyAlgorithm;
   keySize: number;
   encrypted: boolean;
+  publicKeySha256?: string;
+};
+
+export type Pkcs12EncryptionInfo = {
+  scheme: string;
+  kdf?: string;
+  cipher?: string;
+  iterationCount?: number;
+  prf?: string;
+};
+
+export type Pkcs12BagKind = "key" | "cert" | "other";
+
+export type Pkcs12BagInfo = {
+  kind: Pkcs12BagKind;
+  friendlyName?: string;
+  localKeyId?: string;
+};
+
+export type Pkcs12Generation = "modern" | "legacy" | "mixed" | "unknown";
+
+export type Pkcs12StructureInfo = {
+  macAlgorithm?: string;
+  macIterationCount?: number;
+  keyEncryption?: Pkcs12EncryptionInfo;
+  certEncryption?: Pkcs12EncryptionInfo;
+  bags: Pkcs12BagInfo[];
+  generation: Pkcs12Generation;
 };
 
 export type Pkcs12ViewResult = {
   privateKey?: PrivateKeyInfo;
   serverCert?: CertificateInfo;
   chainCerts: CertificateInfo[];
+  structure?: Pkcs12StructureInfo;
 };
 
 export type WarningCode =
@@ -140,6 +170,17 @@ export type ListAliasesRequest = {
   keystoreFile: string;
   keystorePassword: string;
   storeType: "JKS" | "PKCS12";
+};
+
+export type AliasEntryType =
+  | "PrivateKeyEntry"
+  | "TrustedCertEntry"
+  | "SecretKeyEntry"
+  | "Unknown";
+
+export type AliasEntry = {
+  alias: string;
+  entryType: AliasEntryType;
 };
 
 export type JksToP12Request = {

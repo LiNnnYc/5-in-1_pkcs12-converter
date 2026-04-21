@@ -3,7 +3,13 @@ import type { OperationResult, Pkcs12ViewResult, ViewRequest, CertificateInfo } 
 import { validateFilePath, validatePassword } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
-import { parseCertificateText, parseKeyInfo, runOpenssl } from "../engines/openssl-runner";
+import {
+  parseCertificateText,
+  parseKeyInfo,
+  publicKeyFingerprintFromCert,
+  publicKeyFingerprintFromKey,
+  runOpenssl
+} from "../engines/openssl-runner";
 import { classifyError, parseCertInfo, parsePrivateKeyInfo, splitPemCerts } from "../engines/output-parser";
 import { createLogger } from "../utils/logger";
 
@@ -92,6 +98,8 @@ export async function viewPkcs12(
       const keyText = await parseKeyInfo(keyTmp);
       if (keyText.exitCode === 0) {
         privateKey = parsePrivateKeyInfo(keyText.stdout);
+        const fp = await publicKeyFingerprintFromKey(keyTmp);
+        if (fp) privateKey.publicKeySha256 = fp;
       }
     }
 
@@ -105,7 +113,10 @@ export async function viewPkcs12(
       await writeFile(path, blocks[i].endsWith("\n") ? blocks[i] : `${blocks[i]}\n`);
       const textRes = await parseCertificateText(path);
       if (textRes.exitCode !== 0) continue;
-      parsedCerts.push(parseCertInfo(textRes.stdout));
+      const info = parseCertInfo(textRes.stdout);
+      const fp = await publicKeyFingerprintFromCert(path);
+      if (fp) info.publicKeySha256 = fp;
+      parsedCerts.push(info);
     }
 
     // First cert in a PKCS#12 bag is conventionally the leaf; the rest form

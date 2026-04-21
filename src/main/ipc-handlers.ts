@@ -1,4 +1,5 @@
-import { ipcMain, dialog, BrowserWindow } from "electron";
+import { ipcMain, dialog, BrowserWindow, app, shell } from "electron";
+import { statSync } from "node:fs";
 import type {
   OperationResult,
   MergePrecheckRequest,
@@ -73,6 +74,25 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle("app:getSessionId", async () => {
     return getSessionId();
+  });
+
+  ipcMain.handle("app:quit", () => {
+    app.quit();
+  });
+
+  ipcMain.handle("shell:revealPath", async (_e, path: string) => {
+    if (!path || typeof path !== "string") return;
+    try {
+      const st = statSync(path);
+      if (st.isDirectory()) {
+        await shell.openPath(path);
+      } else {
+        shell.showItemInFolder(path);
+      }
+    } catch {
+      // fallback: try showing in folder regardless
+      shell.showItemInFolder(path);
+    }
   });
 
   ipcMain.handle("dialog:openFile", async (e, params: OpenFileDialogRequest) => {

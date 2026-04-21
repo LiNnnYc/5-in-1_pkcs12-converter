@@ -148,6 +148,38 @@ function normalizePem(pem: string): string {
   return pem.replace(/\r\n/g, "\n").trim();
 }
 
+// SHA-256 over SubjectPublicKeyInfo DER, formatted as colon-separated uppercase hex.
+// Matches the "public key fingerprint" shown by tools like `ssh-keygen -l -f pubkey.pem`
+// in terms of representing the pubkey identity (though ssh-keygen emits base64/SHA-256:...).
+// Callers should pass a PEM blob with SPKI ("-----BEGIN PUBLIC KEY-----...").
+function spkiSha256Fingerprint(pubkeyPem: string): string {
+  const body = pubkeyPem
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  if (!body) return "";
+  const der = Buffer.from(body, "base64");
+  const hex = createHash("sha256").update(der).digest("hex").toUpperCase();
+  return hex.match(/.{2}/g)?.join(":") ?? "";
+}
+
+export async function publicKeyFingerprintFromKey(
+  keyPath: string,
+  password?: string
+): Promise<string> {
+  const env: NodeJS.ProcessEnv = password ? { KEY_PASSWORD: password } : {};
+  const passin = password ? ["-passin", "env:KEY_PASSWORD"] : [];
+  const r = await runOpenssl(["pkey", "-pubout", "-in", keyPath, ...passin], { env });
+  if (r.exitCode !== 0) return "";
+  return spkiSha256Fingerprint(r.stdout);
+}
+
+export async function publicKeyFingerprintFromCert(certPath: string): Promise<string> {
+  const r = await runOpenssl(["x509", "-pubkey", "-noout", "-in", certPath]);
+  if (r.exitCode !== 0) return "";
+  return spkiSha256Fingerprint(r.stdout);
+}
+
 export async function convertDerToPem(derPath: string, outPath: string): Promise<OpenSslResult> {
   return runOpenssl(["x509", "-inform", "DER", "-outform", "PEM", "-in", derPath, "-out", outPath]);
 }
