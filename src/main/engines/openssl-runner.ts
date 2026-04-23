@@ -180,6 +180,22 @@ export async function publicKeyFingerprintFromCert(certPath: string): Promise<st
   return spkiSha256Fingerprint(r.stdout);
 }
 
+// Dump PKCS#12 structural metadata (MAC, bag encryption, friendlyName, localKeyID).
+// Uses -noout -nokeys -nocerts so no PEM content is emitted — just the header/bag
+// annotations that `openssl pkcs12 -info` prints above each bag.
+export async function dumpPkcs12Info(
+  pfxPath: string,
+  password: string,
+  legacy: boolean
+): Promise<OpenSslResult> {
+  const args = [
+    "pkcs12", "-info", "-noout", "-nokeys", "-nocerts",
+    "-in", pfxPath, "-passin", "env:PFX_PASSWORD"
+  ];
+  if (legacy) args.push("-legacy");
+  return runOpenssl(args, { env: { PFX_PASSWORD: password } });
+}
+
 export async function convertDerToPem(derPath: string, outPath: string): Promise<OpenSslResult> {
   return runOpenssl(["x509", "-inform", "DER", "-outform", "PEM", "-in", derPath, "-out", outPath]);
 }

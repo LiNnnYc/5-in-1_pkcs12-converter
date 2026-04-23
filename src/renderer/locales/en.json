@@ -58,7 +58,7 @@
     "autoContinue": "⏵⏵ Auto-continue"
   },
   "merge": {
-    "pageTitle": "Creating a PKCS#12 file",
+    "pageTitle": "Create a PKCS#12 file",
     "crumb": "Private key + server (leaf) cert + CA chain → .pfx/.p12",
     "statusPrechecking": "Prechecking…",
     "statusMerging": "Creating…",
@@ -97,7 +97,7 @@
     "outputDir": "Output folder",
     "certOutputMode": "Certificate output",
     "merged": "Merged certificates.pem",
-    "split": "Split server.crt / ca-N.crt",
+    "split": "Split {'{'}Cert CN{'}'}.crt certs",
     "legacyMode": "Legacy mode",
     "legacyAuto": "Auto (recommended)",
     "legacyOn": "Force on",
@@ -155,11 +155,35 @@
       "privateKey": "Private key",
       "serverCert": "Server certificate",
       "chainCerts": "Certificate chain",
+      "structure": "PKCS#12 structure",
       "noPrivateKey": "This .pfx / .p12 has no private key",
-      "noChain": "This .pfx / .p12 has no intermediate or root certificates"
+      "noChain": "This .pfx / .p12 has no intermediate or root certificates",
+      "noStructure": "Structure info unavailable"
     },
     "expandHint": "Click to expand details",
-    "collapseHint": "Click to collapse"
+    "collapseHint": "Click to collapse",
+    "structure": {
+      "mac": "Integrity (MAC)",
+      "macSummary": "{algorithm}, Iteration {count}",
+      "keyEncryption": "Private key encryption",
+      "certEncryption": "Certificate encryption",
+      "bags": "Bags",
+      "generation": "Format generation",
+      "generationModern": "Modern (PBES2 + AES + SHA-256)",
+      "generationLegacy": "Legacy (PBE-SHA1-3DES)",
+      "generationMixed": "Mixed",
+      "generationUnknown": "Unknown",
+      "scheme": "Scheme",
+      "kdf": "KDF",
+      "cipher": "Cipher",
+      "prf": "PRF",
+      "iteration": "Iteration",
+      "bagKey": "Key bag",
+      "bagCert": "Certificate bag",
+      "bagOther": "Other",
+      "friendlyName": "Friendly name",
+      "localKeyId": "localKeyID"
+    }
   },
   "cert": {
     "subject": "Subject",

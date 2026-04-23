@@ -97,7 +97,7 @@
     "outputDir": "輸出資料夾",
     "certOutputMode": "憑證輸出方式",
     "merged": "合併成單張 certificates.pem",
-    "split": "拆開的 server.crt / ca-{數字}.crt",
+    "split": "拆開成多張 {'{'}憑證CN{'}'}.crt",
     "legacyMode": "Legacy 模式",
     "legacyAuto": "自動偵測（推薦）",
     "legacyOn": "強制使用",
@@ -155,11 +155,35 @@
       "privateKey": "私鑰資訊",
       "serverCert": "伺服器憑證",
       "chainCerts": "憑證鏈",
+      "structure": "PKCS#12 結構資訊",
       "noPrivateKey": "此 .pfx / .p12 不含私鑰",
-      "noChain": "此 .pfx / .p12 不含中繼憑證或根憑證"
+      "noChain": "此 .pfx / .p12 不含中繼憑證或根憑證",
+      "noStructure": "無法讀取結構資訊"
     },
     "expandHint": "點擊展開詳情",
-    "collapseHint": "點擊收合"
+    "collapseHint": "點擊收合",
+    "structure": {
+      "mac": "完整性 (MAC)",
+      "macSummary": "{algorithm}，Iteration {count}",
+      "keyEncryption": "私鑰加密",
+      "certEncryption": "憑證加密",
+      "bags": "Bag 清單",
+      "generation": "格式世代",
+      "generationModern": "現代（PBES2 + AES + SHA-256）",
+      "generationLegacy": "舊式（PBE-SHA1-3DES）",
+      "generationMixed": "混合",
+      "generationUnknown": "未知",
+      "scheme": "方案",
+      "kdf": "KDF",
+      "cipher": "加密",
+      "prf": "PRF",
+      "iteration": "Iteration",
+      "bagKey": "Key bag",
+      "bagCert": "Certificate bag",
+      "bagOther": "其他",
+      "friendlyName": "別名 (friendlyName)",
+      "localKeyId": "localKeyID"
+    }
   },
   "cert": {
     "subject": "主體 (Subject)",

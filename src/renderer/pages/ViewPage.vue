@@ -9,7 +9,12 @@ import Badge from "../components/Badge.vue";
 import Alert from "../components/Alert.vue";
 import CertDetail from "../components/CertDetail.vue";
 import Icon from "../components/Icon.vue";
-import type { OperationResult, Pkcs12ViewResult } from "../../types";
+import type {
+  OperationResult,
+  Pkcs12BagKind,
+  Pkcs12EncryptionInfo,
+  Pkcs12ViewResult
+} from "../../types";
 
 const { t } = useI18n();
 
@@ -79,6 +84,38 @@ async function run() {
 function toggleChain(i: number) {
   openChainIdx.value = { ...openChainIdx.value, [i]: !openChainIdx.value[i] };
 }
+
+function encSummary(e: Pkcs12EncryptionInfo): string {
+  const pieces: string[] = [e.scheme];
+  const inner: string[] = [];
+  if (e.kdf) inner.push(e.kdf);
+  if (e.cipher) inner.push(e.cipher);
+  if (e.prf) inner.push(`PRF ${e.prf}`);
+  if (inner.length) pieces.push(`(${inner.join(" + ")})`);
+  if (typeof e.iterationCount === "number") pieces.push(`Iteration ${e.iterationCount}`);
+  return pieces.join(", ");
+}
+
+function bagKindLabel(kind: Pkcs12BagKind): string {
+  if (kind === "key") return t("view.structure.bagKey");
+  if (kind === "cert") return t("view.structure.bagCert");
+  return t("view.structure.bagOther");
+}
+
+const generationKind = computed<"ok" | "warn" | "neutral">(() => {
+  const g = view.value?.structure?.generation;
+  if (g === "modern") return "ok";
+  if (g === "legacy") return "warn";
+  return "neutral";
+});
+
+const generationLabel = computed(() => {
+  const g = view.value?.structure?.generation;
+  if (g === "modern") return t("view.structure.generationModern");
+  if (g === "legacy") return t("view.structure.generationLegacy");
+  if (g === "mixed") return t("view.structure.generationMixed");
+  return t("view.structure.generationUnknown");
+});
 
 function resetAll() {
   form.pfxFile = "";
@@ -181,6 +218,40 @@ function resetAll() {
         </div>
         <div v-else class="empty">{{ t("view.sections.noChain") }}</div>
       </Card>
+
+      <Card :title="t('view.sections.structure')">
+        <template v-if="view.structure">
+          <Row :label="t('view.structure.generation')" stack>
+            <Badge :kind="generationKind">{{ generationLabel }}</Badge>
+          </Row>
+          <Row v-if="view.structure.macAlgorithm" :label="t('view.structure.mac')" stack>
+            <span class="mono">
+              {{ t('view.structure.macSummary', {
+                algorithm: view.structure.macAlgorithm,
+                count: view.structure.macIterationCount ?? '?'
+              }) }}
+            </span>
+          </Row>
+          <Row v-if="view.structure.keyEncryption" :label="t('view.structure.keyEncryption')" stack>
+            <span class="mono">{{ encSummary(view.structure.keyEncryption) }}</span>
+          </Row>
+          <Row v-if="view.structure.certEncryption" :label="t('view.structure.certEncryption')" stack>
+            <span class="mono">{{ encSummary(view.structure.certEncryption) }}</span>
+          </Row>
+          <Row v-if="view.structure.bags.length" :label="t('view.structure.bags')" stack>
+            <ul class="bag-list">
+              <li v-for="(b, i) in view.structure.bags" :key="i" class="bag">
+                <Badge :kind="b.kind === 'key' ? 'ok' : b.kind === 'cert' ? 'neutral' : 'warn'">
+                  {{ bagKindLabel(b.kind) }}
+                </Badge>
+                <span v-if="b.friendlyName" class="bag-name">{{ b.friendlyName }}</span>
+                <span v-if="b.localKeyId" class="bag-lkid mono">{{ b.localKeyId }}</span>
+              </li>
+            </ul>
+          </Row>
+        </template>
+        <div v-else class="empty">{{ t("view.sections.noStructure") }}</div>
+      </Card>
     </template>
   </section>
 </template>
@@ -262,5 +333,30 @@ function resetAll() {
 .chain-body {
   background: #ffffff;
   padding: 4px 0;
+}
+
+.bag-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bag-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+.bag-lkid {
+  font-size: 11.5px;
+  color: var(--muted);
+  word-break: break-all;
 }
 </style>

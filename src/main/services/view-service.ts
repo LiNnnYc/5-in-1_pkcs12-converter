@@ -4,13 +4,20 @@ import { validateFilePath, validatePassword } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
 import {
+  dumpPkcs12Info,
   parseCertificateText,
   parseKeyInfo,
   publicKeyFingerprintFromCert,
   publicKeyFingerprintFromKey,
   runOpenssl
 } from "../engines/openssl-runner";
-import { classifyError, parseCertInfo, parsePrivateKeyInfo, splitPemCerts } from "../engines/output-parser";
+import {
+  classifyError,
+  parseCertInfo,
+  parsePkcs12Structure,
+  parsePrivateKeyInfo,
+  splitPemCerts
+} from "../engines/output-parser";
 import { createLogger } from "../utils/logger";
 
 const log = createLogger("view");
@@ -123,8 +130,20 @@ export async function viewPkcs12(
     // the chain. This matches OpenSSL's output ordering for `pkcs12 -nokeys`.
     const [serverCert, ...chainCerts] = parsedCerts;
 
-    const result: Pkcs12ViewResult = { privateKey, serverCert, chainCerts };
-    log.info("view done", { pfx: params.pfxFile, chainLen: chainCerts.length, hasKey: !!privateKey });
+    // Structural metadata (MAC / bag encryption / friendlyNames). Best-effort —
+    // failure here should not fail the whole view; user still sees the cert/key data.
+    let structure: Pkcs12ViewResult["structure"];
+    try {
+      const infoRes = await dumpPkcs12Info(params.pfxFile, params.pfxPassword, certsRes.usedLegacy);
+      if (infoRes.exitCode === 0) {
+        structure = parsePkcs12Structure(`${infoRes.stdout}\n${infoRes.stderr}`);
+      }
+    } catch (e) {
+      log.warn("view: structure parse skipped", { err: (e as Error)?.message });
+    }
+
+    const result: Pkcs12ViewResult = { privateKey, serverCert, chainCerts, structure };
+    log.info("view done", { pfx: params.pfxFile, chainLen: chainCerts.length, hasKey: !!privateKey, hasStructure: !!structure });
     return { success: true, message: "common.viewSucceeded", details: result };
   } catch (err) {
     log.error("view failed", { pfx: params.pfxFile }, err);
