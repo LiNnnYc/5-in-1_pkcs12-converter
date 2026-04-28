@@ -16,3 +16,6 @@ release/
 templates/
 claude_design/
 
+# 真實憑證測試素材（含私鑰 / 密碼 / PFX，絕對不能進 git）
+轉檔程式_測試範本/
+
