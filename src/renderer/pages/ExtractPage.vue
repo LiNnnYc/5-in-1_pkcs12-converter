@@ -27,7 +27,10 @@ const busy = ref(false);
 const result = ref<OperationResult | null>(null);
 
 onActivated(() => {
-  const payload = consume("extract");
+  const payload = consume("extract", () => {
+    form.pfxFile = "";
+    form.pfxPassword = "";
+  });
   if (payload) {
     form.pfxFile = payload.pfxFile;
     form.pfxPassword = payload.pfxPassword;

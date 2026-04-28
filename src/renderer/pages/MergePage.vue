@@ -67,11 +67,16 @@ const algorithmOptions = computed(() => [
   { value: "PBE-SHA1-3DES", label: t("merge.algorithmLegacy") }
 ]);
 
+// Keystore-style minimum for user-created PFX export password. Must stay in
+// sync with validateKeystorePassword() on the main side — front-end disables
+// the action so users get immediate feedback instead of a round-trip error.
+const EXPORT_PASSWORD_MIN_LENGTH = 6;
+
 const canPrecheck = computed(
   () =>
     form.privateKeyFile.length > 0 &&
     form.serverCertFile.length > 0 &&
-    form.exportPassword.length > 0 &&
+    form.exportPassword.length >= EXPORT_PASSWORD_MIN_LENGTH &&
     form.outputFile.length > 0 &&
     state.value !== "prechecking" &&
     state.value !== "merging"
@@ -275,12 +280,20 @@ function handoffToJks() {
 
     <Card :title="t('common.output')">
       <Row :label="t('merge.exportPassword')" required>
-        <PasswordField
-          :modelValue="form.exportPassword"
-          match-file
-          file-mode="save"
-          @update:modelValue="(v: string) => (form.exportPassword = v)"
-        />
+        <div class="pwd-with-hint">
+          <PasswordField
+            :modelValue="form.exportPassword"
+            match-file
+            file-mode="save"
+            @update:modelValue="(v: string) => (form.exportPassword = v)"
+          />
+          <div
+            v-if="form.exportPassword.length > 0 && form.exportPassword.length < EXPORT_PASSWORD_MIN_LENGTH"
+            class="pwd-hint"
+          >
+            {{ t("merge.exportPasswordMinHint", { min: EXPORT_PASSWORD_MIN_LENGTH }) }}
+          </div>
+        </div>
       </Row>
       <Row :label="t('merge.algorithm')">
         <select
@@ -339,4 +352,6 @@ function handoffToJks() {
 }
 .inline-status.success { color: var(--ok-ink); }
 .inline-status.error { color: var(--err-ink); }
+.pwd-with-hint { display: flex; flex-direction: column; gap: 4px; }
+.pwd-hint { font-size: 12px; color: var(--err-ink); }
 </style>

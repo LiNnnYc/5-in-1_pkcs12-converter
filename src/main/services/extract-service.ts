@@ -2,11 +2,13 @@ import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtractRequest, LegacyMode, OperationResult, OperationWarning } from "../../types";
-import { validateFilePath, validateOutputDir, validatePassword } from "../utils/sanitizer";
+import { validateFilePath, validateOutputDir, validatePassword, validationErrorKey } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
 import { runOpenssl, parseCertificateText } from "../engines/openssl-runner";
+import { readFileForOpenssl } from "../utils/safe-path";
 import { classifyError, parseCertInfo, splitPemCerts } from "../engines/output-parser";
+import { mapError } from "./error-mapper";
 import { createLogger } from "../utils/logger";
 
 const log = createLogger("extract");
@@ -16,12 +18,13 @@ type LegacyDecision = {
   uncertain: boolean; // caller should emit LEGACY_MODE_UNCERTAIN warning
 };
 
-async function probeLegacy(pfxFile: string, pfxPassword: string): Promise<LegacyDecision> {
-  // Try a lightweight "info" probe without -legacy first.
+async function probeLegacy(pfxBuf: Buffer, pfxPassword: string): Promise<LegacyDecision> {
+  // Try a lightweight "info" probe without -legacy first. Pfx content is fed via
+  // stdin so non-ASCII user paths cannot reach openssl.
   const probe = await runOpenssl([
-    "pkcs12", "-in", pfxFile, "-nokeys", "-noout",
+    "pkcs12", "-nokeys", "-noout",
     "-passin", "env:PFX_PASSWORD"
-  ], { env: { PFX_PASSWORD: pfxPassword } });
+  ], { env: { PFX_PASSWORD: pfxPassword }, stdin: pfxBuf });
 
   if (probe.exitCode === 0) return { useLegacy: false, uncertain: false };
 
@@ -30,6 +33,12 @@ async function probeLegacy(pfxFile: string, pfxPassword: string): Promise<Legacy
   if (kind === "password") {
     // Surface as exception-like sentinel so caller converts to user-facing error.
     throw new Error("PASSWORD_ERROR");
+  }
+  if (kind === "format") {
+    // Non-PFX file (or corrupted) — don't pretend legacy might help, raise a
+    // clear format-error sentinel so the UI shows "檔案格式無效" rather than
+    // "OpenSSL failed" + a confusing LEGACY_MODE_UNCERTAIN warning.
+    throw new Error("FORMAT_ERROR");
   }
   return { useLegacy: false, uncertain: true };
 }
@@ -90,18 +99,19 @@ function uniqueName(base: string, used: Set<string>): string {
 }
 
 async function runExtract(
-  pfxFile: string,
+  pfxBuf: Buffer,
   pfxPassword: string,
   extraArgs: string[],
   outPath: string,
   useLegacy: boolean
 ): Promise<{ exitCode: number; stderr: string }> {
   const base = [
-    "pkcs12", "-in", pfxFile, "-passin", "env:PFX_PASSWORD",
+    "pkcs12", "-passin", "env:PFX_PASSWORD",
     ...extraArgs, "-out", outPath
   ];
   const r = await runOpenssl(pkcs12Args(base, useLegacy), {
-    env: { PFX_PASSWORD: pfxPassword }
+    env: { PFX_PASSWORD: pfxPassword },
+    stdin: pfxBuf
   });
   return { exitCode: r.exitCode, stderr: r.stderr };
 }
@@ -129,24 +139,40 @@ export async function extractPkcs12(
   workDirOverride?: string
 ): Promise<OperationResult> {
   const fileCheck = validateFilePath(params.pfxFile);
-  if (!fileCheck.ok) return { success: false, message: "error.invalidInput", details: { field: "pfxFile", reason: fileCheck.reason } };
+  if (!fileCheck.ok) return { success: false, message: validationErrorKey(fileCheck), details: { field: "pfxFile", reason: fileCheck.reason } };
   const pwCheck = validatePassword(params.pfxPassword);
-  if (!pwCheck.ok) return { success: false, message: "error.invalidInput", details: { field: "pfxPassword", reason: pwCheck.reason } };
+  if (!pwCheck.ok) return { success: false, message: validationErrorKey(pwCheck), details: { field: "pfxPassword", reason: pwCheck.reason } };
   const dirCheck = validateOutputDir(params.outputDir);
-  if (!dirCheck.ok) return { success: false, message: "error.invalidInput", details: { field: "outputDir", reason: dirCheck.reason } };
+  if (!dirCheck.ok) return { success: false, message: validationErrorKey(dirCheck), details: { field: "outputDir", reason: dirCheck.reason } };
 
   const workDir = workDirOverride ?? resolveWorkDir();
   const tmp = new TempFileManager({ workDir });
   tmp.ensureWorkDir();
 
+  // Read pfx into memory once and pipe to every openssl invocation via stdin
+  // (avoids OpenSSL 3.x's non-ASCII path bug on Windows).
+  let pfxBuf: Buffer;
+  try {
+    pfxBuf = await readFileForOpenssl(params.pfxFile);
+  } catch (err) {
+    tmp.cleanup();
+    log.error("extract: pfx read failed", { pfx: params.pfxFile }, err);
+    return { success: false, message: "error.fileNotFound", details: { field: "pfxFile", reason: (err as Error).message } };
+  }
+
   let probed: LegacyDecision | undefined;
   if (params.legacyMode === "auto") {
     try {
-      probed = await probeLegacy(params.pfxFile, params.pfxPassword);
+      probed = await probeLegacy(pfxBuf, params.pfxPassword);
     } catch (err) {
-      if ((err as Error).message === "PASSWORD_ERROR") {
+      const msg = (err as Error).message;
+      if (msg === "PASSWORD_ERROR") {
         tmp.cleanup();
         return { success: false, message: "error.passwordIncorrect" };
+      }
+      if (msg === "FORMAT_ERROR") {
+        tmp.cleanup();
+        return { success: false, message: "error.formatInvalid" };
       }
       throw err;
     }
@@ -162,12 +188,13 @@ export async function extractPkcs12(
   try {
     // Step 1: private key (unencrypted, per spec)
     const keyRes = await runExtract(
-      params.pfxFile, params.pfxPassword,
+      pfxBuf, params.pfxPassword,
       ["-nocerts", "-noenc"], keyTmp, decision.useLegacy
     );
     if (keyRes.exitCode !== 0) {
       const kind = classifyError(keyRes.stderr);
       if (kind === "password") return { success: false, message: "error.passwordIncorrect", warnings };
+      if (kind === "format") return { success: false, message: "error.formatInvalid", warnings };
       return {
         success: false,
         message: "error.opensslFailed",
@@ -178,7 +205,7 @@ export async function extractPkcs12(
 
     // Step 2: server (leaf) cert
     const serverRes = await runExtract(
-      params.pfxFile, params.pfxPassword,
+      pfxBuf, params.pfxPassword,
       ["-clcerts", "-nokeys"], serverTmp, decision.useLegacy
     );
     if (serverRes.exitCode !== 0) {
@@ -192,7 +219,7 @@ export async function extractPkcs12(
 
     // Step 3: CA chain certs (may be empty, which is OK)
     const caRes = await runExtract(
-      params.pfxFile, params.pfxPassword,
+      pfxBuf, params.pfxPassword,
       ["-cacerts", "-nokeys"], caTmp, decision.useLegacy
     );
     if (caRes.exitCode !== 0) {
@@ -262,7 +289,21 @@ export async function extractPkcs12(
     };
   } catch (err) {
     log.error("extract failed", { pfx: params.pfxFile }, err);
-    return { success: false, message: "error.unknown", details: { error: (err as Error).message } };
+    const e = err as NodeJS.ErrnoException;
+    // Node fs errors during the final user-output writes (copyFile / writeFile)
+    // surface here as ErrnoException. Map common ones to specific i18n keys so
+    // users see "輸出資料夾無法寫入" instead of the generic "未知錯誤" that the
+    // first round of M3 manual testing flagged for read-only output dirs.
+    if (e?.code === "EACCES" || e?.code === "EPERM" || e?.code === "EROFS") {
+      return { success: false, message: "error.outputNotWritable", details: { code: e.code } };
+    }
+    if (e?.code === "ENOENT") {
+      return { success: false, message: "error.fileNotFound", details: { code: e.code } };
+    }
+    // Otherwise let mapError pick a reasonable key from the message text;
+    // anything we don't recognize still falls through to error.unknown.
+    const mapped = mapError(e?.message ?? "");
+    return { success: false, message: mapped.i18nKey, details: { error: e?.message } };
   } finally {
     tmp.cleanup();
   }

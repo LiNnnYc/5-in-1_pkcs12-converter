@@ -55,7 +55,14 @@ export function mapError(stderrOrMessage: string, exitCode?: number): MappedErro
   if (/password must be at least 6 characters|keystore password must be/i.test(s)) {
     return { i18nKey: "error.passwordTooShort" };
   }
-  if (/input not an x\.509 certificate|keystore load.*invalid|not a valid keystore|invalid keystore format/i.test(s)) {
+  if (
+    /input not an x\.509 certificate|keystore load.*invalid|not a valid keystore|invalid keystore format/i.test(s) ||
+    // Additional keytool variants seen on JDK 17+ when fed non-keystore content:
+    //   - "toDerInputStream rejects tag type N" (ASN.1 header unparseable)
+    //   - "java.io.EOFException" (file too small / truncated)
+    //   - "not a PKCS#12 file" / "DerInputStream.getLength(): lengthTag=..."
+    /toderinputstream rejects tag type|java\.io\.eofexception|not a pkcs#?12 file|derinputstream\.getlength/i.test(s)
+  ) {
     return { i18nKey: "error.formatInvalid" };
   }
 

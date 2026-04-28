@@ -30,6 +30,18 @@ const allConfirmed = computed(() =>
   mustConfirm.value.every((w) => confirmed.value[w.code])
 );
 
+// Pull the subject list a chain-related warning carries in `details`. Both
+// `subjects: string[]` (REORDERED / EXTRA / DUPLICATE) and `subject: string`
+// (ANCHOR) are normalized to a single array so the template can render the
+// affected certs uniformly.
+function subjectsOf(w: OperationWarning): string[] {
+  const d = w.details;
+  if (!d) return [];
+  if (Array.isArray(d.subjects)) return d.subjects.filter((x): x is string => typeof x === "string");
+  if (typeof d.subject === "string") return [d.subject];
+  return [];
+}
+
 function confirm() {
   const codes = props.warnings.filter((w) => confirmed.value[w.code]).map((w) => w.code);
   emit("confirm", codes);
@@ -49,10 +61,16 @@ function confirm() {
             <strong>{{ t(`warning.${w.code}`) }}</strong>
           </label>
           <p v-if="w.message" class="msg">{{ w.message }}</p>
+          <ul v-if="subjectsOf(w).length > 0" class="subjects">
+            <li v-for="s in subjectsOf(w)" :key="s" class="subject" :title="s">{{ s }}</li>
+          </ul>
         </li>
         <li v-for="w in informational" :key="w.code" class="item info">
           <strong>{{ t(`warning.${w.code}`) }}</strong>
           <p v-if="w.message" class="msg">{{ w.message }}</p>
+          <ul v-if="subjectsOf(w).length > 0" class="subjects">
+            <li v-for="s in subjectsOf(w)" :key="s" class="subject" :title="s">{{ s }}</li>
+          </ul>
         </li>
       </ul>
 
@@ -91,6 +109,26 @@ h2 { margin: 0 0 6px; font-size: 1.15rem; color: #1e293b; }
 .item.info { background: #f1f5f9; }
 .item label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .msg { margin: 4px 0 0 24px; font-size: 0.85rem; color: #475569; }
+.subjects {
+  margin: 6px 0 0 24px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.subject {
+  font-family: var(--font-mono, Consolas, monospace);
+  font-size: 0.78rem;
+  color: #334155;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .actions { display: flex; justify-content: flex-end; gap: 10px; }
 .btn {
   padding: 7px 16px; border-radius: 6px; border: 1px solid #cbd5e1;

@@ -1,8 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { OperationResult, Pkcs12ViewResult, ViewRequest, CertificateInfo } from "../../types";
-import { validateFilePath, validatePassword } from "../utils/sanitizer";
+import { validateFilePath, validatePassword, validationErrorKey } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
+import { readFileForOpenssl } from "../utils/safe-path";
 import {
   dumpPkcs12Info,
   parseCertificateText,
@@ -23,32 +24,34 @@ import { createLogger } from "../utils/logger";
 const log = createLogger("view");
 
 async function probeAndExtract(
-  pfxFile: string,
+  pfxBuf: Buffer,
   pfxPassword: string,
   forceLegacy: boolean | undefined,
   extractArgs: string[],
   outPath: string
 ): Promise<{ exitCode: number; stderr: string; usedLegacy: boolean }> {
+  // Pipe pfx via stdin instead of `-in <userPath>` so non-ASCII (CJK / emoji)
+  // user paths cannot reach openssl's path handling at all.
   const base = [
-    "pkcs12", "-in", pfxFile, "-passin", "env:PFX_PASSWORD",
+    "pkcs12", "-passin", "env:PFX_PASSWORD",
     ...extractArgs, "-out", outPath
   ];
   const env = { PFX_PASSWORD: pfxPassword };
 
   if (forceLegacy === true) {
-    const r = await runOpenssl([...base, "-legacy"], { env });
+    const r = await runOpenssl([...base, "-legacy"], { env, stdin: pfxBuf });
     return { exitCode: r.exitCode, stderr: r.stderr, usedLegacy: true };
   }
   if (forceLegacy === false) {
-    const r = await runOpenssl(base, { env });
+    const r = await runOpenssl(base, { env, stdin: pfxBuf });
     return { exitCode: r.exitCode, stderr: r.stderr, usedLegacy: false };
   }
   // auto
-  const first = await runOpenssl(base, { env });
+  const first = await runOpenssl(base, { env, stdin: pfxBuf });
   if (first.exitCode === 0) return { exitCode: 0, stderr: first.stderr, usedLegacy: false };
   const kind = classifyError(first.stderr);
   if (kind === "legacy") {
-    const second = await runOpenssl([...base, "-legacy"], { env });
+    const second = await runOpenssl([...base, "-legacy"], { env, stdin: pfxBuf });
     return { exitCode: second.exitCode, stderr: second.stderr, usedLegacy: true };
   }
   return { exitCode: first.exitCode, stderr: first.stderr, usedLegacy: false };
@@ -61,12 +64,12 @@ export async function viewPkcs12(
   const fileCheck = validateFilePath(params.pfxFile);
   if (!fileCheck.ok) {
     log.warn("view: invalid input", { field: "pfxFile", reason: fileCheck.reason });
-    return { success: false, message: "error.invalidInput" };
+    return { success: false, message: validationErrorKey(fileCheck) };
   }
   const pwCheck = validatePassword(params.pfxPassword);
   if (!pwCheck.ok) {
     log.warn("view: invalid input", { field: "pfxPassword", reason: pwCheck.reason });
-    return { success: false, message: "error.invalidInput" };
+    return { success: false, message: validationErrorKey(pwCheck) };
   }
 
   const workDir = workDirOverride ?? resolveWorkDir();
@@ -81,9 +84,10 @@ export async function viewPkcs12(
   try {
     const keyTmp = tmp.createTempFile("key.pem");
     const certTmp = tmp.createTempFile("certs.pem");
+    const pfxBuf = await readFileForOpenssl(params.pfxFile);
 
     const certsRes = await probeAndExtract(
-      params.pfxFile, params.pfxPassword, forceLegacy,
+      pfxBuf, params.pfxPassword, forceLegacy,
       ["-nokeys"], certTmp
     );
     if (certsRes.exitCode !== 0) {
@@ -96,7 +100,7 @@ export async function viewPkcs12(
     }
 
     const keyRes = await probeAndExtract(
-      params.pfxFile, params.pfxPassword, certsRes.usedLegacy ? true : forceLegacy,
+      pfxBuf, params.pfxPassword, certsRes.usedLegacy ? true : forceLegacy,
       ["-nocerts", "-noenc"], keyTmp
     );
     // Missing private key in the pfx is allowed — result.privateKey stays undefined.

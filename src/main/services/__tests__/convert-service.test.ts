@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -141,11 +141,16 @@ d("convert-service integration (keytool + openssl)", () => {
 
     const r = await jksToP12({
       jksFile: jks,
-      jksPassword: "WRONG",
+      jksPassword: "WRONGPASS",
       outputFile: out,
       outputPassword: "destpass"
     });
     expect(r.success).toBe(false);
+    // Regression for M3 manual-test #3: listAliases stderr used to be truncated
+    // to the last 2 lines, which dropped the "password was incorrect" message
+    // on modern keytool (appends a stack trace). The mapper then fell back to
+    // error.listAliasesFailed. Full stderr is now preserved end-to-end.
+    expect(r.message).toBe("error.passwordIncorrect");
   });
 
   it("P12→JKS round-trips and fixes dest alias to '1'", async () => {
@@ -216,6 +221,42 @@ d("convert-service integration (keytool + openssl)", () => {
     expect(ok.success).toBe(true);
     const outAliases = await listAliases(jksOut, "jkspass", "JKS");
     expect(outAliases.map((a) => a.toLowerCase())).toEqual(["1"]);
+  });
+
+  it("P12→JKS with wrong PFX password returns error.passwordIncorrect (not listAliasesFailed)", async () => {
+    // Regression for M3 manual-test #4: P12→JKS with wrong password used to
+    // fall through to error.listAliasesFailed because keytool writes its
+    // "password was incorrect" sentinel to stdout, not stderr.
+    const jks = join(root, "pwsrc.jks");
+    const p12 = join(root, "pwsrc.p12");
+    const jksOut = join(root, "pwsrc-back.jks");
+    await genJks(jks, "onlyone", "srcpass");
+    const mig = await jksToP12({
+      jksFile: jks, jksPassword: "srcpass",
+      outputFile: p12, outputPassword: "realpass"
+    });
+    expect(mig.success).toBe(true);
+
+    const r = await p12ToJks({
+      pfxFile: p12, pfxPassword: "WRONGPASS",
+      outputFile: jksOut, outputPassword: "jkspass"
+    });
+    expect(r.success).toBe(false);
+    expect(r.message).toBe("error.passwordIncorrect");
+  });
+
+  it("listKeystoreAliases on a non-keystore file returns error.formatInvalid", async () => {
+    // Regression for M3 manual-test #5: feeding a non-P12 file to the alias
+    // picker used to return error.listAliasesFailed. Keytool emits "Invalid
+    // keystore format" (or DerInputStream / EOF variants) to stdout; full
+    // output is now preserved so error-mapper can classify as format error.
+    const garbage = join(root, "garbage.p12");
+    writeFileSync(garbage, "this is absolutely not a keystore\n".repeat(10));
+    const r = await listKeystoreAliases({
+      keystoreFile: garbage, keystorePassword: "anything", storeType: "PKCS12"
+    });
+    expect(r.success).toBe(false);
+    expect(r.message).toBe("error.formatInvalid");
   });
 
   it("listKeystoreAliases returns aliases for a JKS", async () => {

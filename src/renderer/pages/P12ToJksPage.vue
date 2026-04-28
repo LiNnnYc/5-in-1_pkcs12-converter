@@ -29,16 +29,26 @@ const aliases = ref<string[]>([]);
 const result = ref<OperationResult | null>(null);
 
 watch([() => form.pfxFile, () => form.pfxPassword], () => {
-  if (state.value === "picking" || state.value === "error" || state.value === "success") {
-    aliases.value = [];
-    form.alias = "";
-    result.value = null;
-    state.value = "idle";
-  }
+  // Any change to PFX inputs invalidates a previously-listed alias set;
+  // skip only while a network call is in flight so we don't stomp state
+  // mid-operation.
+  if (state.value === "listing" || state.value === "converting") return;
+  if (aliases.value.length === 0 && form.alias === "" && result.value === null && state.value === "idle") return;
+  aliases.value = [];
+  form.alias = "";
+  result.value = null;
+  state.value = "idle";
 });
 
 onActivated(() => {
-  const payload = consume("jksFromP12");
+  // Pass a cleanup fn so the handoff store can clear the inherited password
+  // out of this page's form state on TTL expiry or when the user navigates
+  // away before converting. Without it, the password would linger in memory
+  // indefinitely once consumed.
+  const payload = consume("jksFromP12", () => {
+    form.pfxFile = "";
+    form.pfxPassword = "";
+  });
   if (payload) {
     form.pfxFile = payload.pfxFile;
     form.pfxPassword = payload.pfxPassword;
@@ -58,11 +68,16 @@ const busy = computed(() => state.value === "listing" || state.value === "conver
 
 const canRollback = computed(() => state.value !== "idle");
 
+// Keystore-style minimum. Must stay in sync with validateKeystorePassword() on
+// the main side; UI surfaces the hint up-front instead of waiting for the
+// round-trip error from keytool.
+const KEYSTORE_PASSWORD_MIN_LENGTH = 6;
+
 const canConvert = computed(
   () =>
     form.pfxFile.length > 0 &&
-    form.pfxPassword.length > 0 &&
-    form.outputPassword.length > 0 &&
+    form.pfxPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
+    form.outputPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
     form.outputFile.length > 0 &&
     !busy.value &&
     (state.value !== "picking" || form.alias.length > 0)
@@ -190,11 +205,19 @@ function resetAll() {
         />
       </Row>
       <Row :label="t('p12ToJks.pfxPassword')" required>
-        <PasswordField
-          :modelValue="form.pfxPassword"
-          match-file
-          @update:modelValue="(v: string) => (form.pfxPassword = v)"
-        />
+        <div class="pwd-with-hint">
+          <PasswordField
+            :modelValue="form.pfxPassword"
+            match-file
+            @update:modelValue="(v: string) => (form.pfxPassword = v)"
+          />
+          <div
+            v-if="form.pfxPassword.length > 0 && form.pfxPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
+            class="pwd-hint"
+          >
+            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
+          </div>
+        </div>
       </Row>
       <template #foot>
         <span
@@ -208,12 +231,20 @@ function resetAll() {
 
     <Card :title="t('common.output')">
       <Row :label="t('p12ToJks.outputPassword')" required>
-        <PasswordField
-          :modelValue="form.outputPassword"
-          match-file
-          file-mode="save"
-          @update:modelValue="(v: string) => (form.outputPassword = v)"
-        />
+        <div class="pwd-with-hint">
+          <PasswordField
+            :modelValue="form.outputPassword"
+            match-file
+            file-mode="save"
+            @update:modelValue="(v: string) => (form.outputPassword = v)"
+          />
+          <div
+            v-if="form.outputPassword.length > 0 && form.outputPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
+            class="pwd-hint"
+          >
+            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
+          </div>
+        </div>
       </Row>
       <Row :label="t('p12ToJks.outputFile')" required>
         <FileField
@@ -276,4 +307,6 @@ function resetAll() {
   gap: 6px;
 }
 .page :deep(.picker) { margin-top: 12px; }
+.pwd-with-hint { display: flex; flex-direction: column; gap: 4px; }
+.pwd-hint { font-size: 12px; color: var(--err-ink); }
 </style>

@@ -45,11 +45,23 @@ export async function runKeytool(
   // JVM flags:
   //  - file.encoding=UTF-8 so Chinese alias / DN / file paths don't mojibake
   //    on Windows (default cp950 would break parsing of stderr patterns).
+  //  - sun.jnu.encoding=UTF-8 controls how the JVM encodes filesystem path
+  //    strings when calling native Win32 APIs. Without this, on a non-CJK
+  //    Windows the default ANSI codepage (e.g. cp1252) cannot represent CJK
+  //    code points and keytool throws "java.io.IOException: Bad pathname"
+  //    when -keystore / -srckeystore / -destkeystore points at a path with
+  //    non-ASCII characters. Forcing UTF-8 makes the round-trip lossless.
+  //  - stdout.encoding=UTF-8 + stderr.encoding=UTF-8 because JDK 18+ split
+  //    these from file.encoding; on Windows keytool would still emit cp950
+  //    bytes through stdout otherwise, breaking Chinese alias names.
   //  - user.language=en + user.country=US forces English output so stdout
   //    regexes ("Alias name:", "Warning:", error sentinels) match regardless
   //    of the user's system locale. Portable app must not drift by locale.
   const finalArgs = [
     "-J-Dfile.encoding=UTF-8",
+    "-J-Dsun.jnu.encoding=UTF-8",
+    "-J-Dstdout.encoding=UTF-8",
+    "-J-Dstderr.encoding=UTF-8",
     "-J-Duser.language=en",
     "-J-Duser.country=US",
     ...args
@@ -91,6 +103,14 @@ export async function runKeytool(
     log.error("run failed", { args: finalArgs, durationMs: Date.now() - startedAt }, err);
     return { stdout: "", stderr: e.message ?? String(err), exitCode: -1 };
   }
+}
+
+// Combine stderr + stdout for error-mapper consumption. Keytool is famous for
+// routing its "keytool error: ..." sentinel lines to stdout instead of stderr;
+// any caller that wants to classify a failure must look at both streams.
+function combineOutput(r: KeytoolResult): string {
+  const parts = [r.stderr.trim(), r.stdout.trim()].filter(Boolean);
+  return parts.join("\n");
 }
 
 // Parse `Alias name: xxx` lines from `keytool -list -rfc` output. The -rfc flag
@@ -142,10 +162,11 @@ export async function listAliases(
   ];
   const r = await runKeytool(args, { env: { STORE_PASSWORD: password } });
   if (r.exitCode !== 0) {
-    // Caller's responsibility to distinguish wrong password vs. corrupt file
-    // via error-mapper; we surface a concise error so tests/services get a
-    // structured signal.
-    throw new Error(`keytool list failed (exit ${r.exitCode}): ${r.stderr.trim().split("\n").slice(-2).join(" | ")}`);
+    // keytool writes "keytool error: ..." lines to stdout (not stderr), so we
+    // must include both streams in the error message — otherwise error-mapper
+    // can't see the "password was incorrect" / "Invalid keystore format"
+    // sentinels and falls back to a generic "list aliases failed".
+    throw new Error(`keytool list failed (exit ${r.exitCode}): ${combineOutput(r)}`);
   }
   return parseAliasList(r.stdout);
 }
@@ -167,7 +188,7 @@ export async function listAliasEntries(
   ];
   const r = await runKeytool(args, { env: { STORE_PASSWORD: password } });
   if (r.exitCode !== 0) {
-    throw new Error(`keytool list failed (exit ${r.exitCode}): ${r.stderr.trim().split("\n").slice(-2).join(" | ")}`);
+    throw new Error(`keytool list failed (exit ${r.exitCode}): ${combineOutput(r)}`);
   }
   return parseAliasEntries(r.stdout);
 }

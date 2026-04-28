@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { CertificateInfo, OperationWarning, WarningCode } from "../../types";
 import {
@@ -8,6 +8,7 @@ import {
   readPem
 } from "../engines/openssl-runner";
 import { parseCertInfo, splitPemCerts } from "../engines/output-parser";
+import type { TempFileManager } from "../utils/temp-file";
 
 export type ParsedCert = {
   info: CertificateInfo;
@@ -24,17 +25,23 @@ export type BuildChainResult = {
 
 // Read and parse every file. A single file may contain multiple PEM blocks
 // (common for chain bundles), each one becomes its own ParsedCert.
+//
+// Accepts a TempFileManager so every transient file (DER→PEM staging, per-block
+// single-cert PEMs) is tracked and removed during the caller's cleanup. Earlier
+// versions wrote raw `${workDir}/der-*` / `${workDir}/single-*` paths that
+// leaked between runs and were only swept by the now-removed recursive wipe.
 export async function parseCertificateFiles(
   files: string[],
-  workDir: string
+  tmp: TempFileManager
 ): Promise<ParsedCert[]> {
   const out: ParsedCert[] = [];
+  const workDir = tmp.resolveWorkDir();
+  await mkdir(workDir, { recursive: true });
   for (const file of files) {
     const fmt = await detectFormat(file);
     let pemText: string;
     if (fmt === "DER") {
-      const pemPath = `${workDir}/der-${Date.now()}-${out.length}.pem`;
-      await mkdir(dirname(pemPath), { recursive: true });
+      const pemPath = tmp.createTempFile(`der-${out.length}.pem`);
       const r = await convertDerToPem(file, pemPath);
       if (r.exitCode !== 0) {
         throw new Error(`DER conversion failed for ${file}: ${r.stderr}`);
@@ -49,8 +56,7 @@ export async function parseCertificateFiles(
     }
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
-      const tmpPath = `${workDir}/single-${Date.now()}-${out.length}.pem`;
-      await mkdir(dirname(tmpPath), { recursive: true });
+      const tmpPath = tmp.createTempFile(`single-${out.length}.pem`);
       await writeFile(tmpPath, block);
       const textRes = await parseCertificateText(tmpPath);
       if (textRes.exitCode !== 0) {
@@ -200,7 +206,12 @@ export function generateChainWarnings(
     rebuiltWithoutServer.length > 0 &&
     !sameOrder(originalWithoutServer, rebuiltWithoutServer);
   if (reordered) {
-    push("CHAIN_REORDERED", "Chain order was normalized to issuer → root");
+    // Surface the post-normalization order so the warning dialog can show
+    // users exactly what the new chain looks like (leaf is implicit; list
+    // shows intermediates → root).
+    push("CHAIN_REORDERED", "Chain order was normalized to issuer → root", {
+      subjects: rebuiltWithoutServer.map((c) => c.info.subject)
+    });
   }
 
   return warnings;

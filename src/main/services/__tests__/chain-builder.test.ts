@@ -18,6 +18,7 @@ import {
 import type { CertificateInfo } from "../../../types";
 import { runOpenssl } from "../../engines/openssl-runner";
 import { resolveOpensslPath } from "../../utils/path-resolver";
+import { TempFileManager } from "../../utils/temp-file";
 
 // === Helpers for pure logic tests ===
 
@@ -160,6 +161,17 @@ describe("generateChainWarnings", () => {
     expect(codes).toContain("CHAIN_HAS_EXTRA_CERTS");
     expect(codes).toContain("CHAIN_HAS_ANCHOR");
     expect(codes).toContain("CHAIN_REORDERED");
+
+    // Each chain warning should carry subjects in details so the warning
+    // dialog can render them; mixed scenario covers all four shapes.
+    const reordered = warnings.find((w) => w.code === "CHAIN_REORDERED");
+    expect(reordered?.details?.subjects).toEqual(["CN=Int", "CN=Root"]);
+    const extra = warnings.find((w) => w.code === "CHAIN_HAS_EXTRA_CERTS");
+    expect(extra?.details?.subjects).toEqual(["CN=X"]);
+    const anchor = warnings.find((w) => w.code === "CHAIN_HAS_ANCHOR");
+    expect(anchor?.details?.subject).toBe("CN=Root");
+    const duplicate = warnings.find((w) => w.code === "CHAIN_HAS_DUPLICATE_CERTS");
+    expect(duplicate?.details?.subjects).toEqual(["CN=Int"]);
   });
 
   it("emits no warnings for clean input already in correct order", () => {
@@ -308,7 +320,7 @@ d("chain-builder integration (real openssl)", () => {
   });
 
   it("parses 3 files into 3 ParsedCert with SKI/AKI populated", async () => {
-    const certs = await parseCertificateFiles([rootPem, intPem, srvPem], workDir);
+    const certs = await parseCertificateFiles([rootPem, intPem, srvPem], new TempFileManager({ workDir }));
     expect(certs).toHaveLength(3);
     const subjects = certs.map((c) => c.info.subject).join("\n");
     expect(subjects).toContain("TestRoot");
@@ -319,7 +331,7 @@ d("chain-builder integration (real openssl)", () => {
   });
 
   it("buildChain finds full chain and marks it linked+anchored for real certs", async () => {
-    const [root, int, srv] = await parseCertificateFiles([rootPem, intPem, srvPem], workDir);
+    const [root, int, srv] = await parseCertificateFiles([rootPem, intPem, srvPem], new TempFileManager({ workDir }));
     const res = buildChain(srv, [srv, int, root]);
     expect(res.chain).toHaveLength(3);
     expect(res.chain[0].info.subject).toContain("server.test");
@@ -329,7 +341,7 @@ d("chain-builder integration (real openssl)", () => {
   });
 
   it("chain stays correct when user supplies files in reverse order", async () => {
-    const [root, int, srv] = await parseCertificateFiles([rootPem, intPem, srvPem], workDir);
+    const [root, int, srv] = await parseCertificateFiles([rootPem, intPem, srvPem], new TempFileManager({ workDir }));
     const res = buildChain(srv, [srv, root, int]);
     expect(res.chain.map((c) => c.info.subject).join("|")).toMatch(/server\.test.*TestIntermediate.*TestRoot/);
   });

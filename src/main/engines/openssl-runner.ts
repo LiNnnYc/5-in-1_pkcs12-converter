@@ -1,9 +1,10 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { open, readFile } from "node:fs/promises";
+import { open, readFile, writeFile, unlink } from "node:fs/promises";
 import { resolveOpensslPath, resolveOpensslModulesDir } from "../utils/path-resolver";
 import { createHash } from "node:crypto";
 import { createLogger } from "../utils/logger";
+import { readFileForOpenssl } from "../utils/safe-path";
 
 const log = createLogger("openssl");
 
@@ -20,7 +21,7 @@ export type OpenSslResult = {
 export type RunOpenSslOptions = {
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
-  stdin?: string;
+  stdin?: string | Buffer;
   cwd?: string;
 };
 
@@ -120,21 +121,28 @@ export async function parseCertificateFingerprints(pemPath: string): Promise<{ s
 }
 
 export async function parseKeyInfo(keyPath: string, password?: string): Promise<OpenSslResult> {
-  // Try pkey first (works for RSA/EC/Ed25519 regardless of format).
+  // Pipe content via stdin instead of `-in <path>` to avoid OpenSSL 3.x's OSSL_STORE
+  // failure on Windows for non-ASCII paths (CJK, emoji, etc.).
+  const buf = await readFileForOpenssl(keyPath);
   const env: NodeJS.ProcessEnv = password ? { KEY_PASSWORD: password } : {};
-  const args = ["pkey", "-text", "-noout", "-in", keyPath];
-  if (password) args.splice(args.length, 0, "-passin", "env:KEY_PASSWORD");
-  return runOpenssl(args, { env });
+  const args = ["pkey", "-text", "-noout"];
+  if (password) args.push("-passin", "env:KEY_PASSWORD");
+  return runOpenssl(args, { env, stdin: buf });
 }
 
 // Compare modulus / public key hash of key vs cert. Works for RSA and EC.
+// Both inputs are piped via stdin to dodge OpenSSL 3.x's non-ASCII path bug.
 export async function checkKeyMatchesCert(keyPath: string, certPath: string, keyPassword?: string): Promise<boolean> {
   const env: NodeJS.ProcessEnv = keyPassword ? { KEY_PASSWORD: keyPassword } : {};
   const passin = keyPassword ? ["-passin", "env:KEY_PASSWORD"] : [];
+  const [keyBuf, certBuf] = await Promise.all([
+    readFileForOpenssl(keyPath),
+    readFileForOpenssl(certPath)
+  ]);
 
   const [keyOut, certOut] = await Promise.all([
-    runOpenssl(["pkey", "-pubout", "-in", keyPath, ...passin], { env }),
-    runOpenssl(["x509", "-pubkey", "-noout", "-in", certPath])
+    runOpenssl(["pkey", "-pubout", ...passin], { env, stdin: keyBuf }),
+    runOpenssl(["x509", "-pubkey", "-noout"], { stdin: certBuf })
   ]);
 
   if (keyOut.exitCode !== 0 || certOut.exitCode !== 0) return false;
@@ -167,15 +175,17 @@ export async function publicKeyFingerprintFromKey(
   keyPath: string,
   password?: string
 ): Promise<string> {
+  const buf = await readFileForOpenssl(keyPath);
   const env: NodeJS.ProcessEnv = password ? { KEY_PASSWORD: password } : {};
   const passin = password ? ["-passin", "env:KEY_PASSWORD"] : [];
-  const r = await runOpenssl(["pkey", "-pubout", "-in", keyPath, ...passin], { env });
+  const r = await runOpenssl(["pkey", "-pubout", ...passin], { env, stdin: buf });
   if (r.exitCode !== 0) return "";
   return spkiSha256Fingerprint(r.stdout);
 }
 
 export async function publicKeyFingerprintFromCert(certPath: string): Promise<string> {
-  const r = await runOpenssl(["x509", "-pubkey", "-noout", "-in", certPath]);
+  const buf = await readFileForOpenssl(certPath);
+  const r = await runOpenssl(["x509", "-pubkey", "-noout"], { stdin: buf });
   if (r.exitCode !== 0) return "";
   return spkiSha256Fingerprint(r.stdout);
 }
@@ -188,16 +198,30 @@ export async function dumpPkcs12Info(
   password: string,
   legacy: boolean
 ): Promise<OpenSslResult> {
+  const buf = await readFileForOpenssl(pfxPath);
   const args = [
     "pkcs12", "-info", "-noout", "-nokeys", "-nocerts",
-    "-in", pfxPath, "-passin", "env:PFX_PASSWORD"
+    "-passin", "env:PFX_PASSWORD"
   ];
   if (legacy) args.push("-legacy");
-  return runOpenssl(args, { env: { PFX_PASSWORD: password } });
+  return runOpenssl(args, { env: { PFX_PASSWORD: password }, stdin: buf });
 }
 
 export async function convertDerToPem(derPath: string, outPath: string): Promise<OpenSslResult> {
-  return runOpenssl(["x509", "-inform", "DER", "-outform", "PEM", "-in", derPath, "-out", outPath]);
+  // DER is binary; piping via stdin on Windows hits CRT text-mode CRLF
+  // translation and breaks parsing ("Could not find certificate from <stdin>").
+  // Stage the DER bytes into a sibling ASCII file next to outPath (which is
+  // always under .work/), then point `-in` at that staged copy. Avoids both
+  // the non-ASCII path bug and the stdin binary-mode bug at once.
+  const buf = await readFileForOpenssl(derPath);
+  const stagedDer = `${outPath}.in.der`;
+  await writeFile(stagedDer, buf);
+  try {
+    return await runOpenssl(["x509", "-inform", "DER", "-outform", "PEM", "-in", stagedDer, "-out", outPath]);
+  } finally {
+    // Best-effort cleanup; .work/ teardown will catch any miss.
+    await unlink(stagedDer).catch(() => undefined);
+  }
 }
 
 export async function readPem(filePath: string): Promise<string> {

@@ -136,6 +136,20 @@ d("merge-service integration", () => {
     expect(codes).toContain("CHAIN_HAS_ANCHOR");
   });
 
+  it("precheck on missing file returns error.fileNotFound (not error.invalidInput)", async () => {
+    // Regression for M3 manual-test #7: missing files used to return the same
+    // generic error.invalidInput as "path is the wrong shape", so users couldn't
+    // tell whether their path was typo'd vs the file genuinely went missing.
+    const bogus = join(root, "does-not-exist.key");
+    const res = await mergePrecheck({
+      privateKeyFile: bogus,
+      serverCertFile: certPath,
+      chainCertFiles: [intPath]
+    }, workDir);
+    expect(res.success).toBe(false);
+    expect(res.message).toBe("error.fileNotFound");
+  });
+
   it("precheck fails when key does not match cert", async () => {
     const otherKey = join(root, "other.key");
     await runOpenssl(["genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", otherKey]);
@@ -146,6 +160,33 @@ d("merge-service integration", () => {
     }, workDir);
     expect(res.success).toBe(false);
     expect(res.message).toBe("error.keyMismatch");
+  });
+
+  it("merge rejects short exportPassword with error.passwordTooShort", async () => {
+    // Regression for M3 manual-test batch2 #1: user-created PFX export password
+    // now shares the keystore ≥6 chars floor so obvious typos surface as a
+    // specific "password too short" error instead of silently producing a
+    // weakly-protected output.
+    const pre = await mergePrecheck({
+      privateKeyFile: keyPath,
+      serverCertFile: certPath,
+      chainCertFiles: [intPath]
+    }, workDir);
+    expect(pre.success).toBe(true);
+    const outFile = join(root, "out-short.pfx");
+    const r = await mergePkcs12({
+      privateKeyFile: keyPath,
+      serverCertFile: certPath,
+      chainCertFiles: [intPath],
+      precheckToken: pre.details!.precheckToken,
+      confirmedWarningCodes: (pre.warnings ?? []).filter(w => w.requiresConfirmation).map(w => w.code),
+      exportPassword: "abc",
+      algorithm: "AES-256-CBC",
+      outputFile: outFile
+    }, workDir);
+    expect(r.success).toBe(false);
+    expect(r.message).toBe("error.passwordTooShort");
+    expect(existsSync(outFile)).toBe(false);
   });
 
   it("merge succeeds end-to-end with AES-256-CBC + produces loadable pfx + cleans .work", async () => {

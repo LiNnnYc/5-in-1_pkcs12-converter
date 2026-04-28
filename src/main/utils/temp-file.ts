@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync, readdirSync, rmdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { createLogger } from "./logger";
@@ -53,11 +53,18 @@ export class TempFileManager {
       }
     }
     this.tracked.clear();
-    // Also remove workDir if empty
+    // Remove workDir only if it became empty after we deleted our tracked
+    // files. Earlier this used `rmSync(workDir, recursive: true)` which would
+    // wipe sibling files belonging to concurrently-running services / tests
+    // that share the same workDir — a real foot-gun once multiple service
+    // entries each spawn their own TempFileManager.
     try {
-      rmSync(this.workDir, { recursive: true, force: true });
+      const remaining = readdirSync(this.workDir);
+      if (remaining.length === 0) {
+        rmdirSync(this.workDir);
+      }
     } catch {
-      // best effort
+      // best effort — workDir may not exist (e.g. cleanup() called twice)
     }
     if (removedCount > 0) log.info("cleanup", { removedCount });
   }

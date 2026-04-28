@@ -8,12 +8,20 @@ import { initLogger, createLogger, shutdownLogger } from "./utils/logger";
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 
 function createMainWindow(): BrowserWindow {
+  // In dev mode the default Electron icon shows; packaged builds inherit the
+  // .exe's embedded icon (set via electron-builder win.icon) automatically, so
+  // we only set the runtime icon when not packaged.
+  const devIcon = app.isPackaged
+    ? undefined
+    : join(__dirname, "..", "..", "build", "icon.ico");
+
   const window = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 960,
     minHeight: 640,
     show: false,
+    ...(devIcon ? { icon: devIcon } : {}),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       nodeIntegration: false,

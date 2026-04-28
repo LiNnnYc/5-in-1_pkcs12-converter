@@ -35,13 +35,22 @@ const skippedCount = computed(
 );
 
 watch([() => form.jksFile, () => form.jksPassword], () => {
-  if (state.value === "picking" || state.value === "error" || state.value === "success") {
-    allEntries.value = [];
-    aliases.value = [];
-    form.alias = "";
-    result.value = null;
-    state.value = "idle";
-  }
+  // Any change to JKS inputs invalidates a previously-listed alias set;
+  // skip only while a network call is in flight so we don't stomp state
+  // mid-operation.
+  if (state.value === "listing" || state.value === "converting") return;
+  if (
+    aliases.value.length === 0 &&
+    allEntries.value.length === 0 &&
+    form.alias === "" &&
+    result.value === null &&
+    state.value === "idle"
+  ) return;
+  allEntries.value = [];
+  aliases.value = [];
+  form.alias = "";
+  result.value = null;
+  state.value = "idle";
 });
 
 const jksFilters = [
@@ -55,14 +64,19 @@ const pfxFilters = [
 
 const busy = computed(() => state.value === "listing" || state.value === "converting");
 
+// Keystore-style minimum. Must stay in sync with validateKeystorePassword() on
+// the main side; UI surfaces the hint up-front instead of waiting for the
+// round-trip error from keytool.
+const KEYSTORE_PASSWORD_MIN_LENGTH = 6;
+
 // Primary output-card button: kicks off the alias probe or (single-alias
 // keystores) runs the conversion directly. Locked while the picker is open so
 // the user must commit via the picker's own 下一步 button.
 const canConvert = computed(
   () =>
     form.jksFile.length > 0 &&
-    form.jksPassword.length > 0 &&
-    form.outputPassword.length > 0 &&
+    form.jksPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
+    form.outputPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
     form.outputFile.length > 0 &&
     !busy.value &&
     state.value !== "picking"
@@ -207,11 +221,19 @@ function resetAll() {
         />
       </Row>
       <Row :label="t('jksToP12.jksPassword')" required>
-        <PasswordField
-          :modelValue="form.jksPassword"
-          match-file
-          @update:modelValue="(v: string) => (form.jksPassword = v)"
-        />
+        <div class="pwd-with-hint">
+          <PasswordField
+            :modelValue="form.jksPassword"
+            match-file
+            @update:modelValue="(v: string) => (form.jksPassword = v)"
+          />
+          <div
+            v-if="form.jksPassword.length > 0 && form.jksPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
+            class="pwd-hint"
+          >
+            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
+          </div>
+        </div>
       </Row>
       <template #foot>
         <span
@@ -225,12 +247,20 @@ function resetAll() {
 
     <Card :title="t('common.output')">
       <Row :label="t('jksToP12.outputPassword')" required>
-        <PasswordField
-          :modelValue="form.outputPassword"
-          match-file
-          file-mode="save"
-          @update:modelValue="(v: string) => (form.outputPassword = v)"
-        />
+        <div class="pwd-with-hint">
+          <PasswordField
+            :modelValue="form.outputPassword"
+            match-file
+            file-mode="save"
+            @update:modelValue="(v: string) => (form.outputPassword = v)"
+          />
+          <div
+            v-if="form.outputPassword.length > 0 && form.outputPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
+            class="pwd-hint"
+          >
+            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
+          </div>
+        </div>
       </Row>
       <Row :label="t('jksToP12.outputFile')" required>
         <FileField
@@ -305,4 +335,6 @@ function resetAll() {
   color: var(--muted);
   font-style: italic;
 }
+.pwd-with-hint { display: flex; flex-direction: column; gap: 4px; }
+.pwd-hint { font-size: 12px; color: var(--err-ink); }
 </style>

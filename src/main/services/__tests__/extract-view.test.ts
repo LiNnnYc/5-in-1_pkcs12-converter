@@ -159,6 +159,26 @@ d("extract-service + view-service integration", () => {
     expect(r.message).toBe("error.passwordIncorrect");
   });
 
+  it("extract on non-PFX file returns error.formatInvalid (not opensslFailed)", async () => {
+    // Regression for M3 manual-test #6: feeding a non-PFX file to extract used
+    // to surface error.opensslFailed plus a LEGACY_MODE_UNCERTAIN warning.
+    // probeLegacy now classifies clear format errors and short-circuits to
+    // error.formatInvalid so the UI shows "檔案格式無效" directly.
+    const garbage = join(root, "garbage.pfx");
+    writeFileSync(garbage, "this is definitely not a pfx\n".repeat(10));
+    const outDir = join(root, "out-garbage");
+    mkdtempLike(outDir);
+    const r = await extractPkcs12({
+      pfxFile: garbage,
+      pfxPassword: "whatever",
+      outputDir: outDir,
+      certOutputMode: "merged",
+      legacyMode: "auto"
+    }, workDir);
+    expect(r.success).toBe(false);
+    expect(r.message).toBe("error.formatInvalid");
+  });
+
   // === view ===
 
   it("view returns structured result for AES pfx", async () => {

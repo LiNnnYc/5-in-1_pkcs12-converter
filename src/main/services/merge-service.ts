@@ -1,4 +1,5 @@
-import { statSync } from "node:fs";
+import { statSync, existsSync } from "node:fs";
+import { copyFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type {
@@ -12,9 +13,10 @@ import type {
   Pkcs12Algorithm,
   WarningCode
 } from "../../types";
-import { validateFilePath, validateOutputPath, validatePassword } from "../utils/sanitizer";
+import { validateFilePath, validateOutputPath, validatePassword, validateKeystorePassword, validationErrorKey } from "../utils/sanitizer";
 import { TempFileManager } from "../utils/temp-file";
 import { resolveWorkDir } from "../utils/path-resolver";
+import { withSafeOutputPath } from "../utils/safe-path";
 import {
   checkKeyMatchesCert,
   runOpenssl
@@ -27,6 +29,7 @@ import {
   writeChainPem,
   type ParsedCert
 } from "./chain-builder";
+import { mapError } from "./error-mapper";
 import { createLogger } from "../utils/logger";
 
 const log = createLogger("merge");
@@ -75,13 +78,16 @@ function validateInputs(p: MergePrecheckRequest): V {
   for (const f of files) {
     const r = validateFilePath(f);
     if (!r.ok) {
-      return { ok: false, message: "error.invalidInput", details: { field: "file", file: f, reason: r.reason } };
+      // Surface a specific i18n key per failure code (e.g. error.fileNotFound
+      // vs error.invalidInput) so users can distinguish "file is missing" from
+      // "path is the wrong shape".
+      return { ok: false, message: validationErrorKey(r), details: { field: "file", file: f, reason: r.reason } };
     }
   }
   if (p.privateKeyPassword !== undefined && p.privateKeyPassword !== "") {
     const r = validatePassword(p.privateKeyPassword);
     if (!r.ok) {
-      return { ok: false, message: "error.invalidInput", details: { field: "privateKeyPassword", reason: r.reason } };
+      return { ok: false, message: validationErrorKey(r), details: { field: "privateKeyPassword", reason: r.reason } };
     }
   }
   return { ok: true };
@@ -116,9 +122,9 @@ export async function mergePrecheck(
 
     // Parse all chain input candidates.
     const chainParsed: ParsedCert[] = params.chainCertFiles.length > 0
-      ? await parseCertificateFiles(params.chainCertFiles, workDir)
+      ? await parseCertificateFiles(params.chainCertFiles, tmp)
       : [];
-    const [serverParsed] = await parseCertificateFiles([params.serverCertFile], workDir);
+    const [serverParsed] = await parseCertificateFiles([params.serverCertFile], tmp);
 
     const { unique, duplicates } = deduplicateCerts([serverParsed, ...chainParsed]);
     // Separate server from the rest after dedup.
@@ -222,16 +228,20 @@ export async function mergePkcs12(
     return { success: false, message: inputCheck.message };
   }
 
-  const exportPw = validatePassword(params.exportPassword);
+  // exportPassword is user-created for a new PFX, so enforce the same ≥6 chars
+  // floor we use for JKS/PKCS12 keystore passwords. Obvious typos (empty / very
+  // short) surface as error.passwordTooShort instead of silently producing a
+  // weak-protected file.
+  const exportPw = validateKeystorePassword(params.exportPassword);
   if (!exportPw.ok) {
     log.warn("merge: invalid input", { field: "exportPassword", reason: exportPw.reason });
-    return { success: false, message: "error.invalidInput", details: { field: "exportPassword", reason: exportPw.reason } };
+    return { success: false, message: validationErrorKey(exportPw), details: { field: "exportPassword", reason: exportPw.reason } };
   }
 
   const outCheck = validateOutputPath(params.outputFile);
   if (!outCheck.ok) {
     log.warn("merge: invalid input", { field: "outputFile", reason: outCheck.reason });
-    return { success: false, message: "error.invalidInput", details: { field: "outputFile", reason: outCheck.reason } };
+    return { success: false, message: validationErrorKey(outCheck), details: { field: "outputFile", reason: outCheck.reason } };
   }
 
   // Token validation — rejects when any input file changed since precheck.
@@ -268,8 +278,8 @@ export async function mergePkcs12(
     let chainPemPath: string | undefined;
     if (normalized.length > 0) {
       // Re-parse chain inputs to get rawPem for each; then writeChainPem.
-      const chainParsed = await parseCertificateFiles(params.chainCertFiles, workDir);
-      const serverFp = (await parseCertificateFiles([params.serverCertFile], workDir))[0].info.fingerprint.sha256;
+      const chainParsed = await parseCertificateFiles(params.chainCertFiles, tmp);
+      const serverFp = (await parseCertificateFiles([params.serverCertFile], tmp))[0].info.fingerprint.sha256;
       const { unique } = deduplicateCerts(chainParsed);
       const uniqueWithoutServer = unique.filter((c) => c.info.fingerprint.sha256 !== serverFp);
       // Reorder to match normalizedChainCerts order
@@ -284,25 +294,44 @@ export async function mergePkcs12(
       }
     }
 
-    const args = buildPkcs12Args({
-      algorithm: params.algorithm,
-      keyPath: params.privateKeyFile,
-      certPath: params.serverCertFile,
-      chainPemPath,
-      outputPath: params.outputFile,
-      hasKeyPassword: !!params.privateKeyPassword
+    // Stage inputs into .work/ under ASCII names so OpenSSL never sees the
+    // user's potentially non-ASCII paths via `-inkey` / `-in`. Node `fs.copyFile`
+    // uses Win32 wide-char APIs and handles Unicode correctly.
+    const stagedKey = tmp.createTempFile("input.key");
+    const stagedCert = tmp.createTempFile("input.cert");
+    await copyFile(params.privateKeyFile, stagedKey);
+    await copyFile(params.serverCertFile, stagedCert);
+
+    // Output also goes via .work/ (ASCII tmp) when the user picked a non-ASCII
+    // destination, then fs.rename moves it to the user path.
+    const r = await withSafeOutputPath(params.outputFile, workDir, async (asciiOut) => {
+      const args = buildPkcs12Args({
+        algorithm: params.algorithm,
+        keyPath: stagedKey,
+        certPath: stagedCert,
+        chainPemPath,
+        outputPath: asciiOut,
+        hasKeyPassword: !!params.privateKeyPassword
+      });
+      const env: NodeJS.ProcessEnv = { EXPORT_PASSWORD: params.exportPassword };
+      if (params.privateKeyPassword) env.KEY_PASSWORD = params.privateKeyPassword;
+      return runOpenssl(args, { env });
     });
-
-    const env: NodeJS.ProcessEnv = { EXPORT_PASSWORD: params.exportPassword };
-    if (params.privateKeyPassword) env.KEY_PASSWORD = params.privateKeyPassword;
-
-    const r = await runOpenssl(args, { env });
     if (r.exitCode !== 0) {
       return {
         success: false,
         message: "error.opensslFailed",
         details: { exitCode: r.exitCode, stderr: r.stderr }
       };
+    }
+
+    // Defense in depth: OpenSSL has been known to exit 0 even when the output
+    // couldn't be written (e.g. a Windows folder whose DACL silently discards
+    // the write). If the file isn't on disk, surface it rather than claiming
+    // success.
+    if (!existsSync(params.outputFile)) {
+      log.warn("merge: openssl exited 0 but output file missing", { output: params.outputFile });
+      return { success: false, message: "error.outputNotCreated" };
     }
 
     log.info("merge done", { algorithm: params.algorithm, output: params.outputFile });
@@ -313,7 +342,15 @@ export async function mergePkcs12(
     };
   } catch (err) {
     log.error("merge failed", undefined, err);
-    return { success: false, message: "error.unknown" };
+    const e = err as NodeJS.ErrnoException;
+    if (e?.code === "EACCES" || e?.code === "EPERM" || e?.code === "EROFS") {
+      return { success: false, message: "error.outputNotWritable", details: { code: e.code } };
+    }
+    if (e?.code === "ENOENT") {
+      return { success: false, message: "error.fileNotFound", details: { code: e.code } };
+    }
+    const mapped = mapError(e?.message ?? "");
+    return { success: false, message: mapped.i18nKey };
   } finally {
     tmp.cleanup();
   }

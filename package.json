@@ -1,6 +1,6 @@
 {
   "name": "pkcs12-converter",
-  "version": "0.2.3",
+  "version": "0.2.7",
   "private": true,
   "description": "Windows desktop app for PKCS#12 merge, extract, and view workflows.",
   "main": "dist/main/index.js",
@@ -12,6 +12,7 @@
     "build": "npm run build:renderer && npm run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.node.json",
+    "build:icon": "node scripts/build-icon.mjs",
     "package": "npm run build && electron-builder --config electron-builder.yml",
     "test": "vitest run"
   },
@@ -25,10 +26,11 @@
     "concurrently": "^9.1.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vitest": "^2.1.8",
     "wait-on": "^8.0.1"
   }
 }
-
