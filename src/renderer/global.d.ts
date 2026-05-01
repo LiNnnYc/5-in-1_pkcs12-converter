@@ -52,6 +52,7 @@ declare global {
       quitApp: () => Promise<void>;
       revealPath: (path: string) => Promise<void>;
       revealWorkDir: () => Promise<void>;
+      openExternal: (url: string) => Promise<void>;
       getSettings: () => Promise<AppSettings>;
       setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
       getEngineInfo: () => Promise<EngineInfo>;

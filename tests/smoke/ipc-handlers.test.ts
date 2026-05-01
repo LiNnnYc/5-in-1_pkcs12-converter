@@ -80,6 +80,7 @@ describe("IPC registration", () => {
       "pkcs12:view",
       "settings:get",
       "settings:set",
+      "shell:openExternal",
       "shell:revealPath",
       "shell:revealWorkDir"
     ]);

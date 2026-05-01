@@ -290,6 +290,7 @@
       "version": "アプリバージョン",
       "workDir": ".work \n一時フォルダー",
       "github": "GitHub",
+      "githubOpen": "GitHub ページを開く",
       "githubPlaceholder": "近日公開",
       "githubDisabledTitle": "GitHub リンクはまだ利用できません"
     }

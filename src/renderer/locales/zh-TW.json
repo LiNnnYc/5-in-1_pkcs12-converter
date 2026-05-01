@@ -290,6 +290,7 @@
       "version": "App 版本",
       "workDir": ".work 暫存資料夾",
       "github": "GitHub",
+      "githubOpen": "開啟 GitHub 頁面",
       "githubPlaceholder": "即將推出",
       "githubDisabledTitle": "目前尚未提供 GitHub 連結"
     }

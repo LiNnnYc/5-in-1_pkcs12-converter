@@ -12,6 +12,11 @@ const { t } = useI18n();
 type LogLevel = AppSettings["logging"]["level"];
 const LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 
+// Project repo URL is fixed; flip GITHUB_PUBLIC to true once the repo is public
+// to enable the link button. URL stays the same — no other code changes needed.
+const GITHUB_URL = "https://github.com/LiNnnYc/5-in-1_pkcs12-converter";
+const GITHUB_PUBLIC = false;
+
 const loaded = ref(false);
 const logEnabled = ref(false);
 const logLevel = ref<LogLevel>("info");
@@ -66,6 +71,10 @@ async function openLogsDir() {
   if (runtime.value?.logsDir) {
     await window.electronAPI.revealPath(runtime.value.logsDir);
   }
+}
+
+async function openGithub() {
+  await window.electronAPI.openExternal(GITHUB_URL);
 }
 
 async function openWorkDir() {
@@ -175,7 +184,22 @@ async function openWorkDir() {
         </div>
       </Row>
       <Row :label="t('settings.about.github')">
-        <button type="button" class="btn-mini disabled" disabled :title="t('settings.about.githubDisabledTitle')">
+        <button
+          v-if="GITHUB_PUBLIC"
+          type="button"
+          class="btn-mini"
+          :title="GITHUB_URL"
+          @click="openGithub"
+        >
+          {{ t("settings.about.githubOpen") }}
+        </button>
+        <button
+          v-else
+          type="button"
+          class="btn-mini disabled"
+          disabled
+          :title="t('settings.about.githubDisabledTitle')"
+        >
           {{ t("settings.about.githubPlaceholder") }}
         </button>
       </Row>

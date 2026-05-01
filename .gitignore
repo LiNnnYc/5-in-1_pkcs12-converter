@@ -5,12 +5,24 @@ release/
 *.log
 settings.json
 
+# Runtime state
+logs/
+
+# 第三方 binary 引擎 — 不入 git，使用者從 GitHub Releases 下載 portable exe
+# 開發者另從 setup script 拉到本地 engines/（見 README.md）
+engines/
+
 # Claude Code 個人設定
 .claude/
 
-# AI 協作 / 內部文件（spec.md 除外，為專案權威規格）
+# 內部企劃 / 規格修訂草稿（已彙整進 spec.md）
+PFX轉檔程式企畫書.txt
+pkcs12轉檔工具_規格書修改_20260409.txt
+
+# AI 協作 / 內部文件（spec.md、人類版 README.md 除外）
 *.md
 !spec.md
+!README.md
 
 # 無法分類的雜項
 雜項/
@@ -19,4 +31,3 @@ claude_design/
 
 # 真實憑證測試素材（含私鑰 / 密碼 / PFX，絕對不能進 git）
 轉檔程式_測試範本/
-

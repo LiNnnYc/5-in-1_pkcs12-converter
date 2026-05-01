@@ -290,6 +290,7 @@
       "version": "App Version",
       "workDir": ".work Temp Folder",
       "github": "GitHub",
+      "githubOpen": "Open GitHub page",
       "githubPlaceholder": "Coming soon",
       "githubDisabledTitle": "GitHub link is not available yet"
     }

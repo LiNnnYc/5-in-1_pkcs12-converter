@@ -124,6 +124,16 @@ export function registerIpcHandlers(): void {
     }
   });
 
+  // Strict allow-list: only github.com URLs over https. The app has exactly one
+  // outbound link (the project repo); anything else is dropped silently.
+  ipcMain.handle("shell:openExternal", async (_e, url: string) => {
+    if (typeof url !== "string") return;
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return; }
+    if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") return;
+    await shell.openExternal(parsed.toString());
+  });
+
   ipcMain.handle("shell:revealPath", async (_e, path: string) => {
     if (!path || typeof path !== "string") return;
     try {
