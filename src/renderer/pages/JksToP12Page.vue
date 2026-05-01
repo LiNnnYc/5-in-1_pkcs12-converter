@@ -75,7 +75,7 @@ const KEYSTORE_PASSWORD_MIN_LENGTH = 6;
 const canConvert = computed(
   () =>
     form.jksFile.length > 0 &&
-    form.jksPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
+    form.jksPassword.length > 0 &&
     form.outputPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
     form.outputFile.length > 0 &&
     !busy.value &&
@@ -221,19 +221,11 @@ function resetAll() {
         />
       </Row>
       <Row :label="t('jksToP12.jksPassword')" required>
-        <div class="pwd-with-hint">
-          <PasswordField
-            :modelValue="form.jksPassword"
-            match-file
-            @update:modelValue="(v: string) => (form.jksPassword = v)"
-          />
-          <div
-            v-if="form.jksPassword.length > 0 && form.jksPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
-            class="pwd-hint"
-          >
-            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
-          </div>
-        </div>
+        <PasswordField
+          :modelValue="form.jksPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.jksPassword = v)"
+        />
       </Row>
       <template #foot>
         <span

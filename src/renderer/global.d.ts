@@ -15,6 +15,26 @@ import type {
   Pkcs12ViewResult
 } from "../types";
 
+export type AppSettings = {
+  logging: { enabled: boolean; level: "debug" | "info" | "warn" | "error" };
+  locale: "zh-TW" | "en" | "ja";
+};
+
+export type EngineInfo = {
+  openssl: { path: string; version: string };
+  keytool: { path: string; version: string };
+  enginesDir: string;
+};
+
+export type RuntimeInfo = {
+  version: string;
+  sessionId: string;
+  loggingEnabled: boolean;
+  currentLogFile: string | null;
+  logsDir: string;
+  workDir: string;
+};
+
 declare global {
   interface Window {
     electronAPI: {
@@ -31,6 +51,11 @@ declare global {
       getSessionId: () => Promise<string>;
       quitApp: () => Promise<void>;
       revealPath: (path: string) => Promise<void>;
+      revealWorkDir: () => Promise<void>;
+      getSettings: () => Promise<AppSettings>;
+      setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>;
+      getEngineInfo: () => Promise<EngineInfo>;
+      getRuntimeInfo: () => Promise<RuntimeInfo>;
     };
   }
 }

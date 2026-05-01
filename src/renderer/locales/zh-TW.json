@@ -3,7 +3,7 @@
     "title": "PKCS #12 Converter",
     "subtitle": "五合一轉檔工具",
     "brandMark": "P12",
-    "version": "{version} · Apache 2.0"
+    "version": "{version} · MIT"
   },
   "nav": {
     "merge": "合成",
@@ -15,13 +15,17 @@
     "groupConvert": "格式轉換",
     "quit": "結束",
     "quitTitle": "結束程式",
-    "language": "語言"
+    "language": "語言",
+    "settings": "設定",
+    "settingsTitle": "開啟設定頁面"
   },
   "common": {
     "browse": "瀏覽…",
     "save": "儲存…",
     "selectDir": "選擇資料夾",
     "addFile": "加入檔案…",
+    "filesAddedNone": "尚未加入任何檔案",
+    "filesAddedCount": "已加入 {n} 個",
     "confirm": "確認",
     "cancel": "取消",
     "reset": "重置",
@@ -48,18 +52,18 @@
     "openOutputDir": "開啟輸出資料夾",
     "reportSession": "回報時請附上 Session ID：{id}",
     "precheckCompleted": "預檢查完成",
-    "mergeSucceeded": "PKCS#12 合成成功",
+    "mergeSucceeded": "PKCS #12 合成成功",
     "extractSucceeded": "已抽取私鑰與憑證",
     "extractSucceededNoChain": "已抽取私鑰與伺服器憑證（不包含 中繼/根 憑證）",
-    "viewSucceeded": "PKCS#12 解析完成",
+    "viewSucceeded": "PKCS #12 解析完成",
     "jksToP12Succeeded": "JKS → P12 轉換成功",
     "p12ToJksSucceeded": "P12 → JKS 轉換成功",
     "aliasesListed": "已列出的 alias 項目",
     "autoContinue": "⏵⏵ 自動繼續",
-    "passwordMinHint": "密碼需至少 {min} 個字元"
+    "passwordMinHint": "密碼至少要 {min} 個字元"
   },
   "merge": {
-    "pageTitle": "產生 PKCS#12 檔案",
+    "pageTitle": "產生 PKCS #12 檔案",
     "crumb": "私鑰 + 伺服器憑證 + CA 憑證鏈 → .pfx/.p12",
     "statusPrechecking": "預檢查中…",
     "statusMerging": "合成中…",
@@ -67,29 +71,21 @@
     "statusError": "發生錯誤",
     "privateKey": "私鑰檔案",
     "privateKeyPassword": "私鑰密碼",
-    "privateKeyPasswordHint": "若私鑰未加密請留空",
+    "privateKeyPasswordHint": "若私鑰沒有密碼，請保留欄位空白",
     "serverCert": "伺服器憑證",
     "chainCerts": "中繼 / 根憑證",
     "chainCertsHint": "可加入多個憑證；重複或無關的憑證將被自動剔除",
-    "exportPassword": "匯出密碼\n（.pfx/.p12 使用）",
-    "exportPasswordMinHint": "密碼需至少 {min} 個字元",
+    "exportPassword": "匯出密碼\n（.pfx/.p12 用）",
+    "exportPasswordMinHint": "密碼至少要 {min} 個字元",
     "algorithm": "加密演算法",
     "algorithmAes": "AES-256-CBC（推薦）",
     "algorithmLegacy": "PBE-SHA1-3DES（相容舊系統）",
     "outputFile": "輸出檔案",
     "precheckButton": "開始",
-    "mergeButton": "合成",
-    "toJksButton": "轉換為 JKS",
-    "toJksDisabled": "Milestone 2 功能",
-    "summary": {
-      "title": "預檢查摘要",
-      "keyMatchesCert": "私鑰與憑證一致",
-      "chainLength": "憑證鏈長度",
-      "droppedCount": "已剔除憑證數"
-    }
+    "toJksButton": "轉換為 JKS"
   },
   "extract": {
-    "pageTitle": "抽取 PKCS#12 檔案",
+    "pageTitle": "抽取 PKCS #12 檔案",
     "crumb": ".pfx → 私鑰 + 憑證（可選擇單張 PEM 檔案或拆開的 .crt 檔案）",
     "statusExtracting": "抽取中…",
     "statusSuccess": "抽取完成",
@@ -105,11 +101,10 @@
     "legacyOn": "強制使用",
     "legacyOff": "強制關閉",
     "legacyHint": "舊系統產生的 PBE-SHA1-3DES 格式 .pfx / .p12 檔案需使用 legacy 模式才能讀取",
-    "extractButton": "抽取",
-    "toExtractButton": "抽取下一個"
+    "extractButton": "抽取"
   },
   "jksToP12": {
-    "pageTitle": "JKS → PKCS#12 檔案",
+    "pageTitle": "JKS → PKCS #12 檔案",
     "crumb": "JKS (.keystore) → .pfx / .p12（透過 Keytool）",
     "statusListing": "列出 alias 項目中…",
     "statusConverting": "轉換中…",
@@ -119,16 +114,14 @@
     "jksPassword": "JKS (.keystore) \n密碼",
     "outputPassword": "輸出的 \n.pfx / .p12 \n密碼",
     "outputFile": "輸出的 \n.pfx / .p12 \n檔案",
-    "listAliasesButton": "列出 Alias 項目",
     "convertButton": "轉換",
     "aliasPickerTitle": "請選擇要匯出的 alias 項目",
-    "aliasPickerHint": "JKS (.keystore) 包含多個可匯出的 alias（PrivateKeyEntry），請選擇一個作為輸出 .pfx / .p12 的來源",
+    "aliasPickerHint": "JKS (.keystore) 包含多個可匯出的 alias 項目（PrivateKeyEntry），請選擇一個作為輸出 .pfx / .p12 的來源",
     "singleAliasNotice": "僅有一個 alias 項目：{alias}",
-    "trustedCertSkipped": "已略過 {count} 個 TrustedCertEntry（只含憑證、無私鑰，無法匯出為 .pfx / .p12）",
-    "toExtractButton": "抽取下一個"
+    "trustedCertSkipped": "已略過 {count} 個 TrustedCertEntry（無私鑰的憑證 Entry 項目，無法匯出為 .pfx / .p12）"
   },
   "p12ToJks": {
-    "pageTitle": "PKCS#12 → JKS 檔案",
+    "pageTitle": "PKCS #12 → JKS 檔案",
     "crumb": ".pfx / .p12 → JKS (.keystore) ─ 透過 Keytool 輸出",
     "statusListing": "列出 alias 項目中…",
     "statusConverting": "轉換中…",
@@ -138,7 +131,6 @@
     "pfxPassword": ".pfx / .p12 密碼",
     "outputPassword": "輸出 JKS \n(.keystore) 密碼",
     "outputFile": "輸出 JKS \n(.keystore) 檔案",
-    "listAliasesButton": "列出 Alias 項目",
     "convertButton": "轉換",
     "aliasPickerTitle": "請選擇要匯出的 alias 項目",
     "aliasPickerHint": ".pfx / .p12 包含多個 alias 項目，請選擇一個作為輸出 JKS (.keystore) 的來源（一次只能匯出一個）",
@@ -146,45 +138,37 @@
     "destAliasNotice": "輸出 JKS (.keystore) 的 PrivateKeyEntry 所屬 alias 值將固定為 \"1\""
   },
   "view": {
-    "pageTitle": "檢視 PKCS#12 檔案",
+    "pageTitle": "檢視 PKCS #12 檔案",
     "crumb": ".pfx / .p12 → 結構化顯示（私鑰 / 憑證 / 憑證鏈）",
     "statusViewing": "解析中…",
     "statusSuccess": "解析完成",
     "statusError": "發生錯誤",
-    "chainItemTitle": "#{index} · {subject}",
     "viewButton": "檢視",
     "sections": {
       "privateKey": "私鑰資訊",
       "serverCert": "伺服器憑證",
       "chainCerts": "憑證鏈",
-      "structure": "PKCS#12 結構資訊",
+      "structure": "PKCS #12 檔案結構",
       "noPrivateKey": "此 .pfx / .p12 不含私鑰",
       "noChain": "此 .pfx / .p12 不含中繼憑證或根憑證",
-      "noStructure": "無法讀取結構資訊"
+      "noStructure": "無法判讀檔案結構"
     },
-    "expandHint": "點擊展開詳情",
+    "expandHint": "點擊展開內容",
     "collapseHint": "點擊收合",
     "structure": {
       "mac": "完整性 (MAC)",
       "macSummary": "{algorithm}，Iteration {count}",
-      "keyEncryption": "私鑰加密",
-      "certEncryption": "憑證加密",
+      "keyEncryption": "私鑰 Bag 加密",
+      "certEncryption": "憑證 Bag 加密",
       "bags": "Bag 清單",
-      "generation": "格式世代",
+      "generation": "加密演算法",
       "generationModern": "現代（PBES2 + AES + SHA-256）",
       "generationLegacy": "舊式（PBE-SHA1-3DES）",
       "generationMixed": "混合",
       "generationUnknown": "未知",
-      "scheme": "方案",
-      "kdf": "KDF",
-      "cipher": "加密",
-      "prf": "PRF",
-      "iteration": "Iteration",
-      "bagKey": "Key bag",
-      "bagCert": "Certificate bag",
-      "bagOther": "其他",
-      "friendlyName": "別名 (friendlyName)",
-      "localKeyId": "localKeyID"
+      "bagKey": "Key Bag",
+      "bagCert": "Certificate Bag",
+      "bagOther": "其他"
     }
   },
   "cert": {
@@ -194,24 +178,22 @@
     "notBefore": "生效日期",
     "notAfter": "到期日期",
     "signatureAlgorithm": "簽章演算法",
-    "subjectAltNames": "別名 (SAN)",
-    "subjectKeyIdentifier": "主體金鑰識別碼 SKI",
-    "authorityKeyIdentifier": "授權單位金鑰識別元 AKI",
+    "subjectAltNames": "主體別名 (SAN)",
+    "subjectKeyIdentifier": "主體金鑰\n識別碼 (SKI)",
+    "authorityKeyIdentifier": "授權單位金鑰\n識別元 (AKI)",
     "fingerprintSha1": "SHA-1 指紋",
     "fingerprintSha256": "SHA-256 指紋",
     "publicKeySha256": "公鑰 SHA-256 指紋",
     "empty": "無"
   },
   "key": {
-    "algorithm": "演算法",
-    "keySize": "金鑰長度 (bits)",
     "encrypted": "加密保護",
     "encryptedYes": "已加密",
     "encryptedNo": "未加密",
     "publicKeySha256": "公鑰 SHA-256 指紋"
   },
   "warning": {
-    "title": "請確認下列警告",
+    "title": "請確認以下警告",
     "description": "合成前需針對每一項警告勾選確認",
     "CHAIN_REORDERED": "憑證順序已被重新排列為 leaf → root",
     "CHAIN_HAS_EXTRA_CERTS": "已剔除與此鏈無關的憑證",
@@ -219,8 +201,8 @@
     "CHAIN_HAS_ANCHOR": "憑證鏈中包含自簽根憑證（anchor）",
     "CHAIN_NOT_LINKED": "伺服器憑證無法與任何提供的中繼憑證串接",
     "LEGACY_MODE_UNCERTAIN": "無法自動判斷是否需要 legacy 模式，如失敗請手動切換",
-    "JKS_MULTIPLE_ALIASES": "JKS (.keystore) 包含多個 alias，請先選定一個再進行轉換",
-    "PKCS12_MULTIPLE_ALIASES": ".pfx / .p12 包含多個 alias 項目，請先選定一個再進行轉換"
+    "JKS_MULTIPLE_ALIASES": "JKS (.keystore) 包含多個 alias，請先選擇一個再進行轉換",
+    "PKCS12_MULTIPLE_ALIASES": ".pfx / .p12 包含多個 alias 項目，請先選擇一個再進行轉換"
   },
   "error": {
     "passwordIncorrect": "密碼錯誤",
@@ -231,26 +213,26 @@
     "notAFile": "指定路徑不是檔案",
     "notADirectory": "指定路徑不是資料夾",
     "extensionNotAllowed": "副檔名不正確",
-    "outputNotWritable": "輸出路徑不可寫入",
-    "outputExists": "輸出檔案已存在，是否覆寫？",
+    "outputNotWritable": "輸出路徑無法寫入",
+    "outputExists": "輸出檔案已存在，是否覆蓋？",
     "timeout": "執行逾時（超過 40 秒）",
-    "legacyRequired": "此檔案需啟用 legacy 模式",
-    "staleToken": "預檢結果已過期，請重新預檢",
+    "legacyRequired": "此檔案需使用 legacy 模式",
+    "staleToken": "預檢查結果已過期，請重新預檢查",
     "unconfirmedWarnings": "尚有警告未確認",
     "unknown": "未知錯誤",
     "internalError": "內部錯誤",
     "aliasNotFound": "指定的 alias 項目不存在於 keystore",
-    "passwordTooShort": "Keystore 密碼需至少 6 個字元",
+    "passwordTooShort": "Keystore 密碼至少要 6 個字元",
     "invalidInput": "輸入格式不正確",
     "keystoreEmpty": "Keystore 不含任何項目",
-    "noExportableAlias": "JKS (.keystore) 不含可匯出的 PrivateKeyEntry（僅有 TrustedCertEntry 無法匯出為 .pfx / .p12）",
+    "noExportableAlias": "JKS (.keystore) 沒有可匯出的 PrivateKeyEntry（TrustedCertEntry 無法匯出成 .pfx / .p12）",
     "aliasSelectionRequired": "請先選擇要轉換的 alias 項目",
     "keytoolFailed": "Keytool 執行失敗",
     "opensslFailed": "OpenSSL 執行失敗",
     "verificationFailed": "輸出檔案驗證失敗",
-    "listAliasesFailed": "無法列出 Keystore 的 alias",
-    "outputNotCreated": "輸出檔未建立",
-    "legacyP12RequiresRemerge": "偵測到 Legacy PKCS#12——請先以 Legacy 模式抽取，再以 AES-256-CBC 重新合成後再轉成 JKS (.keystore)"
+    "listAliasesFailed": "無法列出 Keystore 所含的 alias 項目",
+    "outputNotCreated": "輸出檔案未被建立",
+    "legacyP12RequiresRemerge": "偵測到 Legacy PKCS #12 —— 請先以 Legacy 模式抽取，再以 AES-256-CBC 重新合成後再轉成 JKS (.keystore)"
   },
   "dialog": {
     "selectPrivateKey": "選擇私鑰檔案",
@@ -267,6 +249,49 @@
       "pfx": "PKCS#12 (.pfx, .p12)",
       "jks": "Java KeyStore (.jks, .keystore)",
       "all": "所有檔案"
+    }
+  },
+  "settings": {
+    "pageTitle": "設定",
+    "crumb": "語系 / Log / 轉檔引擎 / 關於",
+    "openFolder": "開啟資料夾",
+    "sections": {
+      "language": "語系",
+      "logging": "Log",
+      "engines": "轉檔引擎資訊",
+      "about": "關於"
+    },
+    "logging": {
+      "enabled": "啟用 Log 紀錄",
+      "enableInline": "啟用",
+      "level": "Log 收集模式",
+      "restartNote": "變更後下次啟動生效",
+      "sessionId": "Session ID",
+      "currentFile": "目前的 Log 檔案",
+      "noFile": "未啟用 / 尚無檔案",
+      "folder": "Log 資料夾",
+      "retention": "保留規則",
+      "retentionValue": "最多保留 14 個檔案，每個檔案寫入上限 10 MB",
+      "levels": {
+        "debug": "Debug：收集所有訊息",
+        "info": "Info（預設）：收集 info / warn / error 訊息",
+        "warn": "Warn：只收集 warn / error 訊息",
+        "error": "Error：只收集 error 訊息（程式發生錯誤時仍會自動寫檔）"
+      }
+    },
+    "engines": {
+      "openssl": "OpenSSL 版本",
+      "opensslPath": "OpenSSL 路徑",
+      "keytool": "Keytool / JRE",
+      "keytoolPath": "Keytool 路徑",
+      "dir": "engines 目錄"
+    },
+    "about": {
+      "version": "App 版本",
+      "workDir": ".work 暫存資料夾",
+      "github": "GitHub",
+      "githubPlaceholder": "即將推出",
+      "githubDisabledTitle": "目前尚未提供 GitHub 連結"
     }
   }
 }

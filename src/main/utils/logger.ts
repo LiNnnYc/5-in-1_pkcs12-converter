@@ -20,9 +20,12 @@ type LoggerState = {
   filePath: string | null;
   fd: number | null;
   buffer: string[];
+  minLevel: LogLevel;
 };
 
 const BUFFER_CAP = 200;
+
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
 const state: LoggerState = {
   enabled: false,
@@ -30,16 +33,19 @@ const state: LoggerState = {
   logsDir: "",
   filePath: null,
   fd: null,
-  buffer: []
+  buffer: [],
+  minLevel: "info"
 };
 
 export type InitLoggerOptions = {
   exeDir: string;       // resolved by path-resolver
   forceEnable?: boolean; // for tests
   argv?: string[];
+  settingsEnabled?: boolean; // from settings.json (user UI toggle)
+  minLevel?: LogLevel;       // from settings.json
 };
 
-// Decide enable from CLI flag, env var, or marker file.
+// Decide enable from CLI flag, env var, marker file, or settings.json.
 function isEnabled(opts: InitLoggerOptions): boolean {
   if (opts.forceEnable) return true;
   const argv = opts.argv ?? process.argv;
@@ -47,6 +53,7 @@ function isEnabled(opts: InitLoggerOptions): boolean {
   if (process.env.PKCS12_DEBUG === "1") return true;
   const marker = join(opts.exeDir, "logs", ".enabled");
   if (existsSync(marker)) return true;
+  if (opts.settingsEnabled) return true;
   return false;
 }
 
@@ -63,6 +70,7 @@ export function initLogger(opts: InitLoggerOptions): void {
   state.sessionId = `#${randomBytes(4).toString("hex")}`;
   state.logsDir = join(opts.exeDir, "logs");
   state.buffer = [];
+  state.minLevel = opts.minLevel ?? "info";
 
   // Always register safety-net handlers so uncaught errors trigger the
   // buffer-flush path even when logging started disabled.
@@ -109,6 +117,12 @@ export function getSessionId(): string {
   return state.sessionId;
 }
 
+// Runtime log-level change. Cheap because it's just a filter threshold —
+// no fd / buffer state to reconcile, unlike enable/disable.
+export function setLogLevel(level: LogLevel): void {
+  state.minLevel = level;
+}
+
 export function isLoggerEnabled(): boolean {
   return state.enabled;
 }
@@ -141,6 +155,8 @@ function write(
   err?: unknown
 ): void {
   if (!state.sessionId) return; // logger not initialized yet
+  // Errors always flow through (they trigger lazy file open even when disabled).
+  if (level !== "error" && LEVEL_RANK[level] < LEVEL_RANK[state.minLevel]) return;
   const record: Record<string, unknown> = {
     ts: new Date().toISOString(),
     sessionId: state.sessionId,
@@ -184,4 +200,5 @@ export function _resetForTests(): void {
   state.filePath = null;
   state.fd = null;
   state.buffer = [];
+  state.minLevel = "info";
 }

@@ -3,6 +3,7 @@ dist/
 release/
 .work/
 *.log
+settings.json
 
 # Claude Code 個人設定
 .claude/

@@ -15,7 +15,13 @@ withDefaults(
   <div class="row" :class="{ stack }">
     <div class="lbl">
       <div class="lbl-text">{{ label }}</div>
-      <span v-if="required" class="req" aria-hidden="true">●</span>
+      <span
+        v-if="required"
+        class="req"
+        role="img"
+        :title="$t('common.required')"
+        :aria-label="$t('common.required')"
+      >●</span>
       <span v-if="optional" class="opt">{{ $t("common.optional") }}</span>
     </div>
     <div class="ctl">

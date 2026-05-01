@@ -14,7 +14,7 @@ const value = computed({
   <select class="lang-select" v-model="value" :aria-label="$t('nav.language')">
     <option value="zh-TW">繁體中文</option>
     <option value="en">English</option>
-    <option value="ja" disabled>日本語（即將推出）</option>
+    <option value="ja">日本語</option>
   </select>
 </template>
 

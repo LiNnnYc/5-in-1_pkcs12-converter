@@ -3,7 +3,7 @@
     "title": "PKCS #12 Converter",
     "subtitle": "5-in-1 Tool Set",
     "brandMark": "P12",
-    "version": "{version} · Apache 2.0"
+    "version": "{version} · MIT"
   },
   "nav": {
     "merge": "Create",
@@ -15,13 +15,17 @@
     "groupConvert": "Format Conversion",
     "quit": "Quit",
     "quitTitle": "Quit application",
-    "language": "Language"
+    "language": "Language",
+    "settings": "Settings",
+    "settingsTitle": "Open settings page"
   },
   "common": {
     "browse": "Browse…",
     "save": "Save…",
     "selectDir": "Select folder",
     "addFile": "Add file…",
+    "filesAddedNone": "No files added",
+    "filesAddedCount": "{n} added",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "reset": "Reset",
@@ -48,10 +52,10 @@
     "openOutputDir": "Open output folder",
     "reportSession": "Please include Session ID when reporting: {id}",
     "precheckCompleted": "Precheck completed",
-    "mergeSucceeded": "PKCS#12 file created",
+    "mergeSucceeded": "PKCS #12 file created",
     "extractSucceeded": "Extracted private key and certificates",
-    "extractSucceededNoChain": "Extracted private key and server certificate (no CA chain present)",
-    "viewSucceeded": "PKCS#12 parsed",
+    "extractSucceededNoChain": "Extracted private key and server (leaf) certificate (no CA chain present)",
+    "viewSucceeded": "PKCS #12 parsed",
     "jksToP12Succeeded": "JKS → P12 conversion succeeded",
     "p12ToJksSucceeded": "P12 → JKS conversion succeeded",
     "aliasesListed": "Aliases listed",
@@ -62,51 +66,42 @@
     "pageTitle": "Generate PKCS #12 File",
     "crumb": "Private key + server (leaf) cert + CA chain → .pfx/.p12",
     "statusPrechecking": "Prechecking…",
-    "statusMerging": "Creating…",
-    "statusSuccess": "Create succeeded",
+    "statusMerging": "Generating…",
+    "statusSuccess": "Generate succeeded",
     "statusError": "Error",
-    "privateKey": "Private key file",
-    "privateKeyPassword": "Private key \npassword",
-    "privateKeyPasswordHint": "Leave empty if the key is not encrypted",
-    "serverCert": "Server (leaf) \ncertificate",
-    "chainCerts": "Intermediate / root \ncertificates",
+    "privateKey": "Private Key File",
+    "privateKeyPassword": "Private Key \nPassword",
+    "privateKeyPasswordHint": "Leave blank if no password is set",
+    "serverCert": "Server (leaf) \nCertificate",
+    "chainCerts": "Intermediate / Root \nCertificates",
     "chainCertsHint": "Multiple files allowed; duplicates and unrelated certs will be filtered",
-    "exportPassword": "Export password \n(for .pfx/.p12)",
+    "exportPassword": "Export Password \n(for .pfx/.p12)",
     "exportPasswordMinHint": "Password must be at least {min} characters",
-    "algorithm": "Encryption algorithm",
+    "algorithm": "Encryption Algorithm",
     "algorithmAes": "AES-256-CBC (recommended)",
     "algorithmLegacy": "PBE-SHA1-3DES (legacy)",
-    "outputFile": "Output file",
+    "outputFile": "Output File",
     "precheckButton": "Start",
-    "mergeButton": "Create",
-    "toJksButton": "Convert to JKS",
-    "toJksDisabled": "Available in Milestone 2",
-    "summary": {
-      "title": "Precheck summary",
-      "keyMatchesCert": "Key matches certificate",
-      "chainLength": "Chain length",
-      "droppedCount": "Filtered certificates"
-    }
+    "toJksButton": "Convert to JKS"
   },
   "extract": {
-    "pageTitle": "Extract key & certs from PKCS #12 File",
+    "pageTitle": "Extract key & cert from PKCS #12 File",
     "crumb": ".pfx → private key + certificates (merged or split)",
     "statusExtracting": "Extracting…",
     "statusSuccess": "Extract succeeded",
     "statusError": "Error",
     "pfxFile": ".pfx / .p12 file",
-    "pfxPassword": ".pfx / .p12 \npassword",
-    "outputDir": "Output folder",
-    "certOutputMode": "Certificate output",
+    "pfxPassword": ".pfx / .p12 \nPassword",
+    "outputDir": "Output Folder",
+    "certOutputMode": "Certificate Output",
     "merged": "Merged certificates.pem",
     "split": "Split {'{'}Cert CN{'}'}.crt certs",
-    "legacyMode": "Legacy mode",
+    "legacyMode": "Legacy Mode",
     "legacyAuto": "Auto (recommended)",
     "legacyOn": "Force on",
     "legacyOff": "Force off",
     "legacyHint": "PBE-SHA1-3DES .pfx / .p12 file from older systems needs the legacy provider",
-    "extractButton": "Extract",
-    "toExtractButton": "Extract next"
+    "extractButton": "Extract"
   },
   "jksToP12": {
     "pageTitle": "JKS → PKCS #12 File",
@@ -115,17 +110,15 @@
     "statusConverting": "Converting…",
     "statusSuccess": "Conversion succeeded",
     "statusError": "Error",
-    "jksFile": "JKS (.keystore) \nfile",
-    "jksPassword": "JKS (.keystore) \npassword",
-    "outputPassword": "Output \n.pfx / .p12 \npassword",
-    "outputFile": "Output \n.pfx / .p12 \nfile",
-    "listAliasesButton": "List aliases",
+    "jksFile": "JKS (.keystore) \nFile",
+    "jksPassword": "JKS (.keystore) \nPassword",
+    "outputPassword": "Output \n.pfx / .p12 \nPassword",
+    "outputFile": "Output \n.pfx / .p12 \nFile",
     "convertButton": "Convert",
     "aliasPickerTitle": "Select alias to export",
     "aliasPickerHint": "This JKS (.keystore) contains multiple exportable PrivateKeyEntry aliases — pick one to export into the .pfx / .p12 file",
     "singleAliasNotice": "Only one alias available: {alias}",
-    "trustedCertSkipped": "Skipped {count} TrustedCertEntry alias(es) — certificate-only entries without a private key cannot be exported to .pfx / .p12",
-    "toExtractButton": "Extract next"
+    "trustedCertSkipped": "Skipped {count} TrustedCertEntry alias(es) — certificate-only entries without a private key cannot be exported to .pfx / .p12"
   },
   "p12ToJks": {
     "pageTitle": "PKCS #12 → JKS File",
@@ -135,10 +128,9 @@
     "statusSuccess": "Conversion succeeded",
     "statusError": "Error",
     "pfxFile": ".pfx / .p12 file",
-    "pfxPassword": ".pfx / .p12 \npassword",
-    "outputPassword": "Output JKS \n(.keystore) \npassword",
-    "outputFile": "Output JKS \n(.keystore) \nfile",
-    "listAliasesButton": "List aliases",
+    "pfxPassword": ".pfx / .p12 \nPassword",
+    "outputPassword": "Output JKS \n(.keystore) \nPassword",
+    "outputFile": "Output JKS \n(.keystore) \nFile",
     "convertButton": "Convert",
     "aliasPickerTitle": "Select alias to export",
     "aliasPickerHint": "This .pfx / .p12 contains multiple aliases — pick one to export into the JKS / .keystore (only one alias per conversion)",
@@ -151,13 +143,12 @@
     "statusViewing": "Parsing…",
     "statusSuccess": "Parsed",
     "statusError": "Error",
-    "chainItemTitle": "#{index} · {subject}",
     "viewButton": "View",
     "sections": {
-      "privateKey": "Private key",
-      "serverCert": "Server certificate",
-      "chainCerts": "Certificate chain",
-      "structure": "PKCS #12 structure",
+      "privateKey": "Private Key",
+      "serverCert": "Server Certificate",
+      "chainCerts": "Certificate Chain",
+      "structure": "PKCS #12 Structure",
       "noPrivateKey": "This .pfx / .p12 has no private key",
       "noChain": "This .pfx / .p12 has no intermediate or root certificates",
       "noStructure": "Structure info unavailable"
@@ -167,24 +158,17 @@
     "structure": {
       "mac": "Integrity (MAC)",
       "macSummary": "{algorithm}, Iteration {count}",
-      "keyEncryption": "Private key encryption",
-      "certEncryption": "Certificate encryption",
+      "keyEncryption": "Private Key Bag \nEncryption",
+      "certEncryption": "Certificate Bag \nEncryption",
       "bags": "Bags",
-      "generation": "Format generation",
+      "generation": "Encryption Algorithm",
       "generationModern": "Modern (PBES2 + AES + SHA-256)",
       "generationLegacy": "Legacy (PBE-SHA1-3DES)",
       "generationMixed": "Mixed",
       "generationUnknown": "Unknown",
-      "scheme": "Scheme",
-      "kdf": "KDF",
-      "cipher": "Cipher",
-      "prf": "PRF",
-      "iteration": "Iteration",
-      "bagKey": "Key bag",
-      "bagCert": "Certificate bag",
-      "bagOther": "Other",
-      "friendlyName": "Friendly name",
-      "localKeyId": "localKeyID"
+      "bagKey": "Key Bag",
+      "bagCert": "Certificate Bag",
+      "bagOther": "Other"
     }
   },
   "cert": {
@@ -194,25 +178,23 @@
     "notBefore": "Valid from",
     "notAfter": "Valid until",
     "signatureAlgorithm": "Signature",
-    "subjectAltNames": "Subject Alternative Name (SAN)",
-    "subjectKeyIdentifier": "Subject Key Identifier (SKI)",
-    "authorityKeyIdentifier": "Authority Key Identifier (AKI)",
-    "fingerprintSha1": "SHA-1 fingerprint",
-    "fingerprintSha256": "SHA-256 fingerprint",
-    "publicKeySha256": "Public key SHA-256 fingerprint",
+    "subjectAltNames": "Subject Alternative \nName (SAN)",
+    "subjectKeyIdentifier": "Subject Key \nIdentifier (SKI)",
+    "authorityKeyIdentifier": "Authority Key \nIdentifier (AKI)",
+    "fingerprintSha1": "SHA-1 Fingerprint",
+    "fingerprintSha256": "SHA-256 Fingerprint",
+    "publicKeySha256": "Public Key SHA-256 \nFingerprint",
     "empty": "None"
   },
   "key": {
-    "algorithm": "Algorithm",
-    "keySize": "Key size (bits)",
     "encrypted": "Encrypted",
     "encryptedYes": "Encrypted",
     "encryptedNo": "Unencrypted",
-    "publicKeySha256": "Public key SHA-256 fingerprint"
+    "publicKeySha256": "Public key SHA-256 \nfingerprint"
   },
   "warning": {
     "title": "Please confirm the following warnings",
-    "description": "Each warning must be explicitly acknowledged before creating",
+    "description": "Each warning must be acknowledged before generating the file",
     "CHAIN_REORDERED": "Cert order in chain normalized to leaf → root",
     "CHAIN_HAS_EXTRA_CERTS": "Filtered certificates unrelated to this chain",
     "CHAIN_HAS_DUPLICATE_CERTS": "Removed duplicate certificates",
@@ -250,7 +232,7 @@
     "verificationFailed": "Output verification failed",
     "listAliasesFailed": "Unable to list keystore aliases",
     "outputNotCreated": "Output file was not created",
-    "legacyP12RequiresRemerge": "Legacy PKCS#12 file detected — extract with Legacy mode ON, then re-create with AES-256-CBC before converting to JKS"
+    "legacyP12RequiresRemerge": "Legacy PKCS #12 file detected — extract with Legacy mode ON, then re-create with AES-256-CBC before converting to JKS"
   },
   "dialog": {
     "selectPrivateKey": "Select private key",
@@ -267,6 +249,49 @@
       "pfx": "PKCS #12 (.pfx, .p12)",
       "jks": "Java KeyStore (.jks, .keystore)",
       "all": "All files"
+    }
+  },
+  "settings": {
+    "pageTitle": "Settings",
+    "crumb": "Language / Log / Engines / About",
+    "openFolder": "Open folder",
+    "sections": {
+      "language": "Language",
+      "logging": "Log",
+      "engines": "Convert Engines",
+      "about": "About"
+    },
+    "logging": {
+      "enabled": "Enable Logging",
+      "enableInline": "Enabled",
+      "level": "Collect Level",
+      "restartNote": "Takes effect on next launch",
+      "sessionId": "Session ID",
+      "currentFile": "Current Log File",
+      "noFile": "Not enabled / No file",
+      "folder": "Log Folder",
+      "retention": "File Retention",
+      "retentionValue": "Up to 14 files, max 10 MB each",
+      "levels": {
+        "debug": "Debug：Collects all messages",
+        "info": "Info (default)：Collects info / warn / error Messages",
+        "warn": "Warn：Collects warn / error Messages only",
+        "error": "Error：Collects \"error\" Messages only (Always recorded on failure)"
+      }
+    },
+    "engines": {
+      "openssl": "OpenSSL Version",
+      "opensslPath": "OpenSSL Path",
+      "keytool": "Keytool / JRE",
+      "keytoolPath": "Keytool Path",
+      "dir": "Engines Folder"
+    },
+    "about": {
+      "version": "App Version",
+      "workDir": ".work Temp Folder",
+      "github": "GitHub",
+      "githubPlaceholder": "Coming soon",
+      "githubDisabledTitle": "GitHub link is not available yet"
     }
   }
 }

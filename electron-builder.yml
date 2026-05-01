@@ -11,6 +11,7 @@ extraResources:
 win:
   target:
     - portable
+    - zip
   icon: build/icon.ico
   artifactName: ${productName}-${version}.${ext}
 

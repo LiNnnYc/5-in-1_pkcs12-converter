@@ -1,9 +1,10 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, Menu } from "electron";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { resolveWorkDir, resolveExeDir } from "./utils/path-resolver";
 import { initLogger, createLogger, shutdownLogger } from "./utils/logger";
+import { loadSettings } from "./services/settings-service";
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? "http://127.0.0.1:5173";
 
@@ -21,6 +22,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     show: false,
+    autoHideMenuBar: true,
     ...(devIcon ? { icon: devIcon } : {}),
     webPreferences: {
       preload: join(__dirname, "preload.js"),
@@ -45,7 +47,13 @@ function createMainWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
-  initLogger({ exeDir: resolveExeDir() });
+  Menu.setApplicationMenu(null);
+  const settings = loadSettings();
+  initLogger({
+    exeDir: resolveExeDir(),
+    settingsEnabled: settings.logging.enabled,
+    minLevel: settings.logging.level
+  });
   const log = createLogger("app");
   log.info("ready", { packaged: app.isPackaged, platform: process.platform });
   registerIpcHandlers();

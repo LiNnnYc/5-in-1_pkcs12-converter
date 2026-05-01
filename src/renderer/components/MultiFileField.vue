@@ -28,7 +28,7 @@ function remove(idx: number) {
         {{ addLabel ?? t("common.addFile") }}
       </button>
       <span class="status">
-        {{ modelValue.length > 0 ? `已加入 ${modelValue.length} 個` : (placeholder ?? "尚未加入任何檔案") }}
+        {{ modelValue.length > 0 ? t("common.filesAddedCount", { n: modelValue.length }) : (placeholder ?? t("common.filesAddedNone")) }}
       </span>
     </div>
     <div v-if="modelValue.length > 0" class="chip-list">

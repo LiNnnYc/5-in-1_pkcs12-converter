@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow, app, shell } from "electron";
-import { statSync } from "node:fs";
+import { statSync, mkdirSync } from "node:fs";
 import type {
   OperationResult,
   MergePrecheckRequest,
@@ -18,7 +18,10 @@ import { extractPkcs12 } from "./services/extract-service";
 import { viewPkcs12 } from "./services/view-service";
 import { jksToP12, p12ToJks, listKeystoreAliases } from "./services/convert-service";
 import { mapError } from "./services/error-mapper";
-import { createLogger, getSessionId } from "./utils/logger";
+import { loadSettings, saveSettings, type AppSettings } from "./services/settings-service";
+import { getEngineInfo } from "./services/engine-info-service";
+import { resolveLogsDir, resolveWorkDir } from "./utils/path-resolver";
+import { createLogger, getSessionId, getLogFilePath, isLoggerEnabled, setLogLevel } from "./utils/logger";
 
 const log = createLogger("ipc");
 
@@ -78,6 +81,47 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle("app:quit", () => {
     app.quit();
+  });
+
+  ipcMain.handle("settings:get", async () => {
+    return loadSettings();
+  });
+
+  ipcMain.handle("settings:set", async (_e, patch: Partial<AppSettings>) => {
+    const next = saveSettings(patch);
+    // Log level applies live; enabled still requires restart so we don't have
+    // to reconcile fd / buffer state mid-flight.
+    if (patch.logging?.level !== undefined) {
+      setLogLevel(next.logging.level);
+    }
+    return next;
+  });
+
+  ipcMain.handle("engines:getInfo", async () => {
+    return getEngineInfo();
+  });
+
+  ipcMain.handle("app:getRuntimeInfo", async () => {
+    return {
+      version: app.getVersion(),
+      sessionId: getSessionId(),
+      loggingEnabled: isLoggerEnabled(),
+      currentLogFile: getLogFilePath(),
+      logsDir: resolveLogsDir(),
+      workDir: resolveWorkDir()
+    };
+  });
+
+  // .work/ is created lazily by services; ensure it exists before revealing
+  // so the user's "open work folder" click never hits a missing path.
+  ipcMain.handle("shell:revealWorkDir", async () => {
+    const dir = resolveWorkDir();
+    try {
+      mkdirSync(dir, { recursive: true });
+      await shell.openPath(dir);
+    } catch {
+      // best-effort
+    }
   });
 
   ipcMain.handle("shell:revealPath", async (_e, path: string) => {

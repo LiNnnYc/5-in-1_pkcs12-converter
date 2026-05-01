@@ -292,9 +292,8 @@ function resetAll() {
   font-style: italic;
 }
 
-.chain-list { display: flex; flex-direction: column; }
-.chain-item { border-top: 1px solid #e5ebf2; }
-.chain-item:first-child { border-top: none; }
+.chain-list { display: flex; flex-direction: column; gap: 8px; }
+.chain-item { border: 1px solid #e5ebf2; border-radius: var(--radius-sm); overflow: hidden; }
 .chain-head {
   width: 100%;
   text-align: left;

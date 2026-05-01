@@ -76,7 +76,7 @@ const KEYSTORE_PASSWORD_MIN_LENGTH = 6;
 const canConvert = computed(
   () =>
     form.pfxFile.length > 0 &&
-    form.pfxPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
+    form.pfxPassword.length > 0 &&
     form.outputPassword.length >= KEYSTORE_PASSWORD_MIN_LENGTH &&
     form.outputFile.length > 0 &&
     !busy.value &&
@@ -205,19 +205,11 @@ function resetAll() {
         />
       </Row>
       <Row :label="t('p12ToJks.pfxPassword')" required>
-        <div class="pwd-with-hint">
-          <PasswordField
-            :modelValue="form.pfxPassword"
-            match-file
-            @update:modelValue="(v: string) => (form.pfxPassword = v)"
-          />
-          <div
-            v-if="form.pfxPassword.length > 0 && form.pfxPassword.length < KEYSTORE_PASSWORD_MIN_LENGTH"
-            class="pwd-hint"
-          >
-            {{ t("common.passwordMinHint", { min: KEYSTORE_PASSWORD_MIN_LENGTH }) }}
-          </div>
-        </div>
+        <PasswordField
+          :modelValue="form.pfxPassword"
+          match-file
+          @update:modelValue="(v: string) => (form.pfxPassword = v)"
+        />
       </Row>
       <template #foot>
         <span

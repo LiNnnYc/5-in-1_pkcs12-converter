@@ -64,11 +64,13 @@ beforeEach(() => {
 describe("IPC registration", () => {
   it("registers all M1 + M2 channels", () => {
     expect([...handlers.keys()].sort()).toEqual([
+      "app:getRuntimeInfo",
       "app:getSessionId",
       "app:quit",
       "dialog:openDirectory",
       "dialog:openFile",
       "dialog:saveFile",
+      "engines:getInfo",
       "jks:fromP12",
       "jks:listAliases",
       "jks:toP12",
@@ -76,7 +78,10 @@ describe("IPC registration", () => {
       "pkcs12:merge",
       "pkcs12:merge:precheck",
       "pkcs12:view",
-      "shell:revealPath"
+      "settings:get",
+      "settings:set",
+      "shell:revealPath",
+      "shell:revealWorkDir"
     ]);
   });
 });

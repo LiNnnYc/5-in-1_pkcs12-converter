@@ -1,18 +1,43 @@
 <script setup lang="ts">
+import { onMounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import MergePage from "./pages/MergePage.vue";
 import ExtractPage from "./pages/ExtractPage.vue";
 import ViewPage from "./pages/ViewPage.vue";
 import JksToP12Page from "./pages/JksToP12Page.vue";
 import P12ToJksPage from "./pages/P12ToJksPage.vue";
+import SettingsPage from "./pages/SettingsPage.vue";
 import Icon, { type IconName } from "./components/Icon.vue";
 import LanguageSelect from "./components/LanguageSelect.vue";
 import { useHandoff, type TabId } from "./stores/handoff";
 import pkg from "../../package.json";
+import appIconUrl from "./assets/app-icon.svg";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const appVersion = `v${pkg.version}`;
 const { activeTab, setActiveTab } = useHandoff();
+
+// Persist locale to settings.json so it survives restart and stays in sync
+// between the sidebar selector and the Settings page (both bind to i18n locale).
+let restoredFromSettings = false;
+onMounted(async () => {
+  try {
+    const s = await window.electronAPI.getSettings();
+    if (s.locale && s.locale !== locale.value) {
+      locale.value = s.locale;
+    }
+  } finally {
+    restoredFromSettings = true;
+  }
+});
+watch(locale, async (next) => {
+  if (!restoredFromSettings) return;
+  try {
+    await window.electronAPI.setSettings({ locale: next as "zh-TW" | "en" | "ja" });
+  } catch {
+    /* non-fatal */
+  }
+});
 
 type NavItem = { id: TabId; icon: IconName };
 const ops: NavItem[] = [
@@ -38,7 +63,7 @@ function onQuit() {
   <div class="app">
     <aside class="side">
       <div class="brand">
-        <div class="brand-mark">{{ t("app.brandMark") }}</div>
+        <img class="brand-mark" :src="appIconUrl" :alt="t('app.brandMark')" />
         <div class="brand-text">
           <div class="t">{{ t("app.title") }}</div>
           <div class="s">{{ t("app.subtitle") }}</div>
@@ -71,12 +96,12 @@ function onQuit() {
         {{ t(`nav.${item.id}`) }}
       </button>
 
-      <div class="spacer" />
-
       <div class="lang-block">
         <div class="group-label lang-label">{{ t("nav.language") }}</div>
         <LanguageSelect />
       </div>
+
+      <div class="spacer" />
 
       <button
         type="button"
@@ -88,6 +113,16 @@ function onQuit() {
         {{ t("nav.quit") }}
       </button>
 
+      <button
+        type="button"
+        class="meta-link"
+        :class="{ active: activeTab === 'settings' }"
+        :title="t('nav.settingsTitle')"
+        @click="setActiveTab('settings')"
+      >
+        {{ t("nav.settings") }}
+      </button>
+
       <div class="version">{{ t("app.version", { version: appVersion }) }}</div>
     </aside>
 
@@ -97,7 +132,8 @@ function onQuit() {
         <ExtractPage v-else-if="activeTab === 'extract'" />
         <ViewPage v-else-if="activeTab === 'view'" />
         <JksToP12Page v-else-if="activeTab === 'jksToP12'" />
-        <P12ToJksPage v-else />
+        <P12ToJksPage v-else-if="activeTab === 'jksFromP12'" />
+        <SettingsPage v-else />
       </KeepAlive>
     </main>
   </div>
@@ -133,13 +169,9 @@ function onQuit() {
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background: var(--accent);
-  display: grid;
-  place-items: center;
-  color: white;
-  font-weight: 700;
-  font-size: 12px;
-  letter-spacing: -0.02em;
+  display: block;
+  flex: 0 0 26px;
+  object-fit: contain;
 }
 .brand-text { line-height: 1.15; min-width: 0; }
 .brand-text .t {
@@ -199,10 +231,22 @@ function onQuit() {
 .spacer { flex: 1; }
 .lang-block { padding: 8px 10px 4px; }
 .lang-label { padding: 0 0 6px; }
+.meta-link {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 11px;
+  text-align: left;
+  padding: 6px 8px 0;
+  cursor: pointer;
+  margin-top: 2px;
+}
+.meta-link:hover { color: #cbd5e1; }
+.meta-link.active { color: var(--accent); }
 .version {
   font-size: 11px;
   color: #64748b;
-  padding: 8px 8px 2px;
+  padding: 2px 8px 2px;
 }
 
 /* ----- Main ----- */

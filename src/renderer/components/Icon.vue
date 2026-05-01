@@ -23,9 +23,12 @@ defineProps<{
     aria-hidden="true"
   >
     <g v-if="name === 'merge'">
-      <path d="M7 4v6a5 5 0 0 0 5 5h5" />
-      <path d="M17 4v6a5 5 0 0 1-5 5H7" />
-      <path d="M20 15l-3 3-3-3" />
+      <circle cx="6" cy="5" r="1.8" fill="currentColor" stroke="none" />
+      <circle cx="18" cy="5" r="1.8" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.8" fill="currentColor" stroke="none" />
+      <path d="M6 7v3a4 4 0 0 0 4 4h2" />
+      <path d="M18 7v3a4 4 0 0 1-4 4h-2" />
+      <path d="M12 14v3.2" />
     </g>
     <g v-else-if="name === 'extract'">
       <path d="M4 4h10l6 6v10H4z" />

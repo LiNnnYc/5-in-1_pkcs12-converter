@@ -1,6 +1,6 @@
 import { ref } from "vue";
 
-export type TabId = "merge" | "extract" | "view" | "jksToP12" | "jksFromP12";
+export type TabId = "merge" | "extract" | "view" | "jksToP12" | "jksFromP12" | "settings";
 
 export type HandoffPayload =
   | { target: "jksFromP12"; pfxFile: string; pfxPassword: string }
