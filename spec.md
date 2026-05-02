@@ -1,12 +1,14 @@
 # 五合一 PKCS #12 轉檔處理工具 — 技術規格書
 
-> 版本：1.0  
-> 日期：2026-04-09
+> 版本：2.0
+> 日期：2026-05-03
+> 初版由 Claude Code 產生（2026-04-09），2.0 版根據 M1～M3 實作結果回饋修訂
 
 ---
 
 ## 目錄
 
+0. [實作狀態](#0-實作狀態)
 1. [功能需求](#1-功能需求)
 2. [非功能需求](#2-非功能需求)
 3. [技術選型](#3-技術選型)
@@ -17,39 +19,53 @@
 
 ---
 
+## 0. 實作狀態
+
+| 里程碑 | 狀態 | 說明 |
+|--------|------|------|
+| M1 — 核心 PKCS#12（合成（產製） / 抽取 / 檢視）+ Electron/Vue scaffold | ✅ 完成（2026-04-18） | 三大功能 + IPC 全接線 + portable 打包驗證 |
+| M1.5 — 收尾技術債（packaging、openDirectory、timeout、錯誤映射、並行鎖） | ✅ 完成 | |
+| M2 — JKS↔P12 + Log 系統 | ✅ 完成（2026-04-18） | Keytool + 最小 JRE 整合 |
+| M2.1 — service 訊息 i18n 化 + P12→JKS 多 alias 使用者選擇 | ✅ 完成 | |
+| M3 — UI polish、實機驗收、app icon、Settings Tab、首次 push GitHub | ✅ 主體完成（2026-05-02） | 第一輪/第二輪實機測試全綠；非 ASCII 路徑全域 bug 一勞永逸修復 |
+| M3 收尾 — code signing 評估 + 清機 Win10/11 VM 安裝測試 | ⏳ 進行中 | |
+
+測試：172/172（含 8 個 real-materials 整合測試 + 8 個 CJK 路徑整合測試）。
+
+---
+
 ## 1. 功能需求
 
-### 1.1 合成 PKCS #12 檔案
+### 1.1 合成（產製） PKCS #12 檔案
 
 | 項目 | 說明 |
 |------|------|
-| **描述** | 使用者提供私鑰檔案、憑證檔案（及選填的中繼憑證），合成一個 `.pfx` / `.p12` 檔案 |
-| **輸入** | ① 私鑰檔案路徑（PEM/DER 格式）② 憑證檔案路徑（PEM/DER 格式）③ 中繼憑證檔案路徑（選填，可多個；可混用 PEM/DER）④ 匯出密碼 ⑤ 輸出檔案路徑 ⑥ 加密演算法選擇（AES-256-CBC 或 PBE-SHA1-3DES） |
+| **描述** | 使用者提供私鑰檔案、憑證檔案（及選填的中繼憑證），合成（產製）一個 `.pfx` / `.p12` 檔案 |
+| **輸入** | ① 私鑰檔案路徑（PEM/DER 格式）② 憑證檔案路徑（PEM/DER 格式）③ 中繼憑證檔案路徑（選填，可多個；可混用 PEM/DER）④ 匯出密碼（≥6 字元，UI 與 backend 雙重檢查）⑤ 輸出檔案路徑 ⑥ 加密演算法選擇（AES-256-CBC 或 PBE-SHA1-3DES） |
 | **輸出** | 一個 PKCS #12 格式檔案（`.pfx` 或 `.p12`） |
-| **對應 OpenSSL 指令** | AES-256-CBC：`openssl pkcs12 -export -out output.pfx -inkey key.pem -in cert.pem -certfile chain.pem -passout env:EXPORT_PASSWORD [-passin env:KEY_PASSWORD] -keypbe aes-256-cbc -certpbe aes-256-cbc -macalg sha256`<br>PBE-SHA1-3DES：`openssl pkcs12 -export -out output.pfx -inkey key.pem -in cert.pem -certfile chain.pem -passout env:EXPORT_PASSWORD [-passin env:KEY_PASSWORD] -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES`<br>其中 `chain.pem` 為程式前處理後輸出的單一暫存鏈檔；`EXPORT_PASSWORD` 與 `KEY_PASSWORD` 為透過 `execFile` 的 `env` 選項注入的環境變數，不出現在 process argument list 中（詳見 §2.2 密碼傳遞策略） |
-| **加密演算法** | • **AES-256-CBC**（預設）：現代加密標準，安全性較高<br>• **PBE-SHA1-3DES**：傳統格式，供舊系統（如舊版 Windows、Java 8 以前）相容使用 |
-| **私鑰前處理** | 若私鑰有密碼保護，透過 OpenSSL 的 `-passin env:KEY_PASSWORD` 參數讓 OpenSSL 在合成時自行解密私鑰，不需事先產生無加密的暫存私鑰檔案。此為強制行為，不提供選項。程式須提示使用者輸入原始私鑰密碼，密碼僅透過環境變數傳入子程序 |
-| **中繼憑證前處理** | `chainFiles[]` 可混用 PEM/DER。程式須先解析所有輸入、將 DER 轉為 PEM、移除重複憑證、辨識並忽略無關憑證、依鏈建構演算法重排為正確鏈順序，最後合併為單一暫存 `chain.pem` 供 OpenSSL `-certfile` 使用 |
-| **鏈建構演算法** | 憑證鏈的銜接判定優先使用 **Authority Key Identifier（AKI）↔ Subject Key Identifier（SKI）** 配對：子憑證的 AKI 必須等於父憑證的 SKI。若憑證不含 AKI/SKI extension（部分舊憑證），則 fallback 為 **issuer DN ↔ subject DN** 字串比對。無法透過上述任一方式連結到鏈中任何憑證的項目，視為「無關憑證」 |
-| **預檢確認流程** | 合成前須先執行 precheck，回傳 `precheckToken`、整理後的憑證鏈與警告清單。正式合成時必須帶回相同的 `precheckToken` 與已確認的 warning code；若輸入檔案已變更或 token 不匹配，必須重新 precheck |
-| **precheckToken 機制** | `precheckToken` 為 precheck 時根據所有輸入檔案的「絕對路徑 + 檔案大小（bytes）+ 最後修改時間（mtime, ms）」計算的 SHA-256 hash 值。正式合成時，程式須以相同邏輯重新計算 hash 並與帶入的 token 比對；若不一致（代表檔案在 precheck 後被修改或替換），拒絕執行並要求重新 precheck |
-| **憑證鏈檢查** | 合成前須檢查「伺服器憑證 + 使用者提供的中繼憑證」是否可串成有效鏈。此檢查僅要求憑證彼此可銜接，不要求最終根憑證已存在於 trusted store。若中繼憑證順序錯誤但內容足以成鏈，程式須在實際合成前自動重排為正確順序；若提供了 self-signed root，須警告使用者該憑證為 chain anchor，但仍提供「仍要繼續合成」選項，讓使用者可將該 anchor 一併打入 `.pfx` / `.p12`；若 chain 中同時含有可成鏈憑證與無關或重複的憑證，須提示使用者，並在合成時自動忽略無關與重複項目；若最終仍無法成鏈，須以明確警告提示使用者，但提供「仍要繼續合成」選項，讓使用者可強制輸出 `.pfx` / `.p12` |
-| **操作串接** | 合成成功後，提供「轉換為 JKS」按鈕，讓使用者可直接將產出的 `.pfx` 檔案轉換為 JKS 格式，免去重新選擇檔案的步驟 |
-| **邊界條件** | • 私鑰與憑證不匹配時須明確提示錯誤<br>• 私鑰有密碼保護時須提示輸入私鑰密碼，並於合成前自動解密<br>• 中繼憑證數量為 0～多個<br>• 中繼憑證順序錯誤但仍可成鏈時，合成前須自動調整順序<br>• chain 中若含無關或重複憑證，須提示使用者，並在合成時自動忽略<br>• chain 中若含 self-signed root（anchor），須警告使用者，但允許使用者確認後仍將其打包進輸出檔<br>• 中繼憑證無法與伺服器憑證串成鏈時，須警告使用者，但允許使用者確認後強制繼續合成<br>• 匯出密碼不可為空（需提示使用者）<br>• 輸出路徑不可寫入時須提示錯誤<br>• 輸出檔案若已存在，須先由 UI 完成是否覆寫的確認，再執行合成 |
+| **對應 OpenSSL 指令** | AES-256-CBC：`openssl pkcs12 -export -out output.pfx -inkey key.pem -in cert.pem -certfile chain.pem -passout env:EXPORT_PASSWORD [-passin env:KEY_PASSWORD] -keypbe aes-256-cbc -certpbe aes-256-cbc -macalg sha256`<br>PBE-SHA1-3DES：`openssl pkcs12 -export -out output.pfx -inkey key.pem -in cert.pem -certfile chain.pem -passout env:EXPORT_PASSWORD [-passin env:KEY_PASSWORD] -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -legacy`<br>實際輸入路徑不直接送進 argv（見 §2.2 CJK 路徑處理）；`chain.pem` 為程式前處理後寫進 `.work/` 的 ASCII 暫存名；輸出檔先寫 `.work/` ASCII 暫存後 `fs.rename` 搬到使用者指定路徑 |
+| **加密演算法** | • **AES-256-CBC**（預設）：現代加密標準<br>• **PBE-SHA1-3DES**：傳統格式（自動加 `-legacy` flag），供舊版 Windows / Java 8 以前相容 |
+| **私鑰前處理** | 若私鑰有密碼保護，透過 `-passin env:KEY_PASSWORD` 讓 OpenSSL 自行解密，不產生無加密暫存私鑰檔。密碼僅透過環境變數傳入子程序 |
+| **中繼憑證前處理** | `chainFiles[]` 可混用 PEM/DER。程式須先解析所有輸入、將 DER 轉為 PEM、移除重複憑證（SHA-256 key）、辨識並忽略無關憑證、依鏈建構演算法重排為正確鏈順序，最後合併為單一 `chain.pem` 供 OpenSSL `-certfile` 使用 |
+| **鏈建構演算法** | 優先 **AKI ↔ SKI** 配對；無 AKI/SKI 時 fallback 為 **issuer DN ↔ subject DN** 比對；無法連結到主鏈的視為無關憑證（`CHAIN_HAS_EXTRA_CERTS`）。pool 為空（只有 leaf）也視為 linked |
+| **預檢查確認流程** | 兩階段：`pkcs12:merge:precheck` 回傳 `precheckToken` + 整理後鏈 + 警告 → `pkcs12:merge` 帶回相同 token 與已確認 warning code 才執行；輸入檔變更或 token 不相符則拒絕並要求重新 precheck |
+| **precheckToken 機制** | SHA-256 hex digest of：所有輸入檔（keyFile / certFile / chainFiles[]）依固定順序串接「絕對路徑 + 檔案大小（bytes）+ mtime（ms）」 |
+| **憑證鏈警告** | `CHAIN_REORDERED`（順序錯誤已自動重排）、`CHAIN_HAS_EXTRA_CERTS`（含無關憑證已忽略）、`CHAIN_HAS_DUPLICATE_CERTS`、`CHAIN_HAS_ANCHOR`（含 self-signed root，使用者可選擇是否打入 `.pfx`）、`CHAIN_NOT_LINKED`（無法成鏈但仍允許強制輸出）。WarningDialog 對前四者統一渲染 `details.subjects` mono-font 清單 |
+| **post-execution 落地檢查** | OpenSSL exit 0 不等於檔案真的寫出。合成完畢以 `existsSync` 確認 `.work/` 暫存實際存在，`fs.rename` 搬到使用者目的後再次確認 |
+| **操作串接** | 合成（產製）成功後，提供「轉換為 JKS」按鈕（透過 `handoff` store 跨 Tab 預填，含 60s TTL 與 tab scrub cleanup） |
+| **邊界條件** | 同初版規範。額外：匯出密碼最小長度 6 字元（UI inline 紅字提示 + 後端 `validateKeystorePassword` 雙重檢查）；輸出路徑可寫入採實際 create+delete probe（NTFS DACL 可靠），不依賴 `accessSync(W_OK)` |
 
 ### 1.2 從 PKCS #12 抽取私鑰與憑證
 
 | 項目 | 說明 |
 |------|------|
 | **描述** | 從 `.pfx` / `.p12` 檔案中分離出私鑰檔案和憑證檔案 |
-| **輸入** | ① PKCS #12 檔案路徑 ② PKCS #12 密碼 ③ 輸出目錄 ④ 憑證輸出格式（合併為單一 PEM 檔案，或拆分為個別 `.crt` 檔案）⑤ Legacy 模式（`auto` / `on` / `off`，預設 `auto`） |
-| **輸出** | ① 私鑰檔案（`.key`，PEM 格式，強制無加密）② 伺服器憑證檔案（PEM 格式）③ 中繼/CA 憑證檔案（PEM 格式，若存在） |
-| **私鑰輸出** | 私鑰強制以無加密的 PEM 格式匯出（副檔名 `.key`），不提供加密選項 |
-| **憑證輸出格式** | 當 PKCS #12 包含多張憑證（伺服器憑證 + 中繼/CA 憑證）時，使用者可選擇：<br>• **合併模式**（預設）：所有憑證匯出至單一 `.pem` 檔案。輸出檔名：私鑰為 `private.key`，合併憑證為 `certificates.pem`<br>• **拆分模式**：每張憑證各自匯出為獨立的 `.crt` 檔案（內容仍為 PEM 格式，強制不使用 DER 格式）。輸出檔名：私鑰為 `private.key`，伺服器憑證為 `server.crt`，中繼/CA 憑證依鏈順序命名為 `ca-1.crt`、`ca-2.crt`… |
-| **Legacy 模式** | 預設為 `auto`：程式自動偵測 PKCS #12 檔案的加密演算法。若為 SHA1-3DES 等舊式加密，自動在 OpenSSL 指令中加入 `-legacy` 參數；`on` 表示強制加入 `-legacy`；`off` 表示禁止加入 `-legacy` |
-| **Legacy auto 偵測機制** | `auto` 模式的偵測策略為「嘗試 → 重試」：先以不含 `-legacy` 的指令執行一次，若 OpenSSL 回傳特定錯誤（如 `unsupported algorithm`、`PKCS12 routines::pkcs12 pbe crypt error` 等 legacy 相關 error pattern），自動加上 `-legacy` 重試。若首次即成功則不加 `-legacy`。若兩次皆失敗（例如密碼錯誤），則以第一次的錯誤回傳。若首次失敗但錯誤訊息不屬於已知的 legacy error pattern，視為無法自動判定，回傳 `LEGACY_MODE_UNCERTAIN` 警告，請使用者改以 `on` 或 `off` 重新執行 |
-| **對應 OpenSSL 指令** | `openssl pkcs12 -in input.pfx -nocerts -noenc -out private.key -passin env:PFX_PASSWORD`<br>`openssl pkcs12 -in input.pfx -clcerts -nokeys -out cert.pem -passin env:PFX_PASSWORD`<br>`openssl pkcs12 -in input.pfx -cacerts -nokeys -out ca.pem -passin env:PFX_PASSWORD`<br>若需 legacy 支援：各指令加入 `-legacy` 參數。注意：OpenSSL 3.x 已將 `-nodes` 更名為 `-noenc`，本專案統一使用 `-noenc` |
-| **邊界條件** | • 密碼錯誤須明確提示<br>• 檔案不含私鑰時須提示<br>• 檔案不含中繼憑證時跳過該輸出並告知使用者<br>• 輸出目錄不存在時自動建立或提示<br>• `auto` 模式無法判定是否需要 `-legacy` 時，須提示使用者改以 `on` 或 `off` 重新執行 |
+| **輸入** | ① PKCS #12 檔案路徑 ② PKCS #12 密碼 ③ 輸出目錄 ④ 憑證輸出格式（合併 / 拆分）⑤ Legacy 模式（`auto` / `on` / `off`，預設 `auto`） |
+| **輸出** | 私鑰 `.key`（強制無加密 PEM）、伺服器憑證、中繼/CA 憑證 |
+| **憑證輸出格式** | • **合併模式**：`private.key` + `certificates.pem`<br>• **拆分模式**：`private.key` + 以 CN 命名的 `.crt`（wildcard `*`→`-`、Windows 保留字元處理、80 字上限）；CN 衝突或缺失時 fallback 為 `server.crt` / `ca-1.crt` / `ca-2.crt` |
+| **Legacy 模式** | 預設 `auto`：先以無 `-legacy` 嘗試，遇 OpenSSL legacy 相關 error pattern（`unsupported algorithm` / `pkcs12 pbe crypt error` 等）自動加 `-legacy` 重試；首次失敗但非已知 legacy pattern → 回 `LEGACY_MODE_UNCERTAIN` 警告請使用者改 `on` / `off` |
+| **對應 OpenSSL 指令** | `pkcs12 -nocerts -noenc` / `-clcerts -nokeys` / `-cacerts -nokeys`，輸入透過 stdin Buffer pipe（見 §2.2），輸出寫 `.work/` 後搬移。OpenSSL 3.x 統一使用 `-noenc` 取代已棄用 `-nodes` |
+| **邊界條件** | 同初版。額外：catch 區塊明確 mapping `EACCES`/`EPERM`/`EROFS`/`ENOENT`，其餘走 `error-mapper` |
 
 ### 1.3 檢視 PKCS #12 檔案資訊
 
@@ -57,32 +73,55 @@
 |------|------|
 | **描述** | 檢視 PKCS #12 檔案中包含的私鑰與憑證詳細資訊 |
 | **輸入** | ① PKCS #12 檔案路徑 ② PKCS #12 密碼 |
-| **輸出** | 結構化顯示：① 私鑰資訊（演算法、長度）② 伺服器憑證（主體、發行者、有效期、序號、SAN、**Subject Key Identifier（主體金鑰識別碼）**）③ 中繼/CA 憑證鏈資訊（含各憑證的 Subject Key Identifier） |
-| **對應 OpenSSL 指令** | `openssl pkcs12 -in input.pfx -info -nokeys -noenc -passin env:PFX_PASSWORD`（OpenSSL 3.x 統一使用 `-noenc` 取代已棄用的 `-nodes`） |
-| **邊界條件** | • 密碼錯誤須明確提示<br>• 解析後的資訊須以易讀的結構化格式呈現，而非 OpenSSL 原始輸出 |
+| **輸出** | 結構化顯示：① 私鑰資訊（演算法、長度、SHA-256 SPKI 公鑰指紋）② 伺服器憑證（主體、發行者、有效期、序號、SAN、SKI、SHA-256 SPKI 公鑰指紋、SHA-1/SHA-256 fingerprint）③ 中繼/CA 憑證鏈資訊 ④ **PKCS#12 結構資訊**（generation modern/legacy、MAC 演算法、PBES2 KDF/Cipher/PRF/iteration、Shrouded Keybag、bags 清單） |
+| **對應 OpenSSL 指令** | `pkcs12 -info -nokeys -noenc`（透過 stdin Buffer pipe），再以 `dumpPkcs12Info` 解析結構 |
+| **邊界條件** | 密碼錯誤須明確提示；解析後資訊以結構化格式呈現，非 OpenSSL 原始輸出；legacy auto-retry 機制同 §1.2 |
 
 ### 1.4 JKS → PKCS #12 轉換
 
 | 項目 | 說明 |
 |------|------|
-| **描述** | 將 Java KeyStore（`.jks` / `.keystore`）檔案轉換為 PKCS #12 格式 |
-| **輸入** | ① JKS 檔案路徑 ② JKS 密碼 ③ 來源 alias 名稱（選填；若有多個 entry 須讓使用者選擇）④ Key 密碼（若與 store 密碼不同）⑤ 輸出 PKCS #12 檔案路徑 ⑥ 輸出密碼 |
-| **輸出** | 一個 PKCS #12 格式檔案 |
-| **alias 規則** | 若 JKS 內只有一個 `PrivateKeyEntry`，可自動選用該 alias；若有多個 `PrivateKeyEntry`，必須先列出讓使用者選擇；`trustedCertEntry` 不可作為轉換來源。輸出的 PKCS #12 Friendly Name / alias 預設沿用選定的來源 alias |
-| **對應 Keytool 指令** | `keytool -importkeystore -noprompt -srckeystore input.jks -srcstoretype JKS -srcstorepass SRC_STORE_PASS -srcalias SOURCE_ALIAS [-srckeypass SRC_KEY_PASS] -destkeystore output.pfx -deststoretype PKCS12 -deststorepass DEST_STORE_PASS -destkeypass DEST_STORE_PASS -destalias SOURCE_ALIAS` |
-| **操作串接** | JKS 轉換為 PKCS #12 成功後，提供「抽取私鑰與憑證」按鈕，讓使用者可直接對產出的 `.pfx` 檔案進行抽取操作，免去重新選擇檔案的步驟 |
-| **邊界條件** | • JKS 含多個 `PrivateKeyEntry` 時須列出讓使用者選擇<br>• 密碼錯誤須明確提示<br>• alias 不含私鑰（僅 `trustedCertEntry`）時須提示並禁止執行<br>• 所有 Keytool 呼叫須以非互動模式執行，不可在子程序中再提示使用者輸入密碼<br>• 輸出檔案若已存在，須先由 UI 完成是否覆寫的確認，再以非互動模式執行 Keytool |
+| **描述** | 將 Java KeyStore（`.jks` / `.keystore`）轉換為 PKCS #12 |
+| **輸入** | ① JKS 檔案路徑 ② JKS 密碼 ③ 來源 alias（多 entry 時必須讓使用者選擇）④ Key 密碼（若與 store 不同）⑤ 輸出路徑 ⑥ 輸出密碼 |
+| **alias 規則** | `jks:listAliases` 回傳 `AliasEntry[]`（含 `entryType: 'PrivateKeyEntry' \| 'trustedCertEntry'`）。AliasPicker UI 過濾出 `PrivateKeyEntry`：單一自動選；多個必選；零個拒絕執行。輸出 PKCS#12 alias 沿用選定來源 |
+| **對應 Keytool 指令** | `keytool -importkeystore -noprompt -srckeystore ... -srcstoretype JKS -srcstorepass ... -srcalias ... [-srckeypass ...] -destkeystore ... -deststoretype PKCS12 -deststorepass ... -destkeypass ... -destalias ...`，附 JVM flags `-J-Duser.language=en -J-Duser.country=US -J-Dsun.jnu.encoding=UTF-8 -J-Dstdout.encoding=UTF-8 -J-Dstderr.encoding=UTF-8` |
+| **操作串接** | 轉換成功後，提供「抽取私鑰與憑證」按鈕（handoff store 同 §1.1） |
+| **邊界條件** | 同初版。額外：所有 Keytool 呼叫一律非互動模式；密碼最小長度 6（UI + backend 雙重）；改密碼/改檔案後自動清空 alias 選擇；keystore 輸入若含非 ASCII 路徑透過 `stageInputForCli` 暫存到 `.work/` |
 
 ### 1.5 PKCS #12 → JKS 轉換
 
 | 項目 | 說明 |
 |------|------|
-| **描述** | 將 PKCS #12 檔案轉換為 Java KeyStore 格式 |
-| **輸入** | ① PKCS #12 檔案路徑 ② PKCS #12 密碼 ③ 輸出 JKS 檔案路徑 ④ 輸出 JKS 密碼 |
-| **輸出** | 一個 JKS 格式檔案（`.jks` 或 `.keystore`） |
-| **alias 規則** | 本功能不提供 alias 輸入。輸出的 JKS alias 固定為 `1`。若來源 PKCS #12 含多個 `PrivateKeyEntry`，視為超出本版範圍，須提示使用者並拒絕執行 |
-| **對應 Keytool 指令** | `keytool -importkeystore -noprompt -srckeystore input.pfx -srcstoretype PKCS12 -srcstorepass SRC_STORE_PASS -destkeystore output.jks -deststoretype JKS -deststorepass DEST_STORE_PASS -destkeypass DEST_STORE_PASS -destalias 1` |
-| **邊界條件** | • 密碼錯誤須明確提示<br>• 輸出路徑不可寫入時須提示<br>• 目的檔若已存在，須先由 UI 完成是否覆寫檔案的確認，再以非互動模式執行 Keytool<br>• 來源 PKCS #12 若含多個 `PrivateKeyEntry`，須提示不支援並停止 |
+| **描述** | 將 PKCS #12 轉換為 JKS |
+| **輸入** | ① PKCS #12 檔案路徑 ② PKCS #12 密碼 ③ 輸出 JKS 路徑 ④ 輸出 JKS 密碼 ⑤ `aliasFilter`（多 alias 時必填） |
+| **alias 規則** | 輸出 JKS alias 固定為 `1`。來源 PKCS#12 含多個 PrivateKeyEntry → 回 `PKCS12_MULTIPLE_ALIASES` warning + alias 清單，UI list→pick→convert 流程；轉換時帶 `aliasFilter` 限定來源 |
+| **Legacy PFX 自動重包** | 來源若為 legacy PFX（PBE-SHA1-3DES 等舊式加密），keytool 無法直接讀。`repackageLegacyPfxAsAes` 先用 OpenSSL 把 PFX 重新匯出為 AES，再餵給 keytool；重包失敗回 `error.legacyP12RequiresRemerge` |
+| **對應 Keytool 指令** | `keytool -importkeystore -noprompt -srckeystore ... -srcstoretype PKCS12 -srcstorepass ... [-srcalias ...] -destkeystore ... -deststoretype JKS -deststorepass ... -destkeypass ... -destalias 1`，JVM flags 同 §1.4 |
+| **邊界條件** | 同初版。額外：error patterns 涵蓋 keytool stdout（不只 stderr）、modern keytool format 錯誤（`toderinputstream rejects tag type` 等）、`tampered with` / `password incorrect` / `alias not exist` |
+
+### 1.6 設定（Settings Tab）
+
+| 項目 | 說明 |
+|------|------|
+| **描述** | 提供使用者設定介面，含 4 區塊：語系 / Log / 引擎資訊 / 關於 |
+| **持久化** | exe 同層 `settings.json`（atomic rename via `.tmp`）；schema `{ logging: { enabled, level }, locale }`；coerce 白名單（`debug/info/warn/error`、`zh-TW/en/ja`）。檔案不存在時用 in-memory defaults，僅在使用者主動改設定才落盤 |
+| **預設值** | `logging.enabled = true`、`logging.level = info`、`locale` 由 i18n 偵測 |
+| **Log 設定** | `enabled` toggle 下次啟動生效（fd / buffer 狀態反覆切換太複雜）；`level` runtime 即時生效（只是改 filter 變數）。UI 用 pending hint 區別兩者 |
+| **語系切換** | sidebar 與 SettingsPage 兩處共用 `LanguageSelect` 元件，皆綁 `i18n.global.locale`；App.vue mount 時從 settings 還原、watch locale 變動寫回 settings（用 `restoredFromSettings` flag 避免初次 hydrate 觸發 watcher） |
+| **引擎資訊** | cache 一次 `openssl version`（stdout）+ `keytool -J-version`（stderr）+ `enginesDir` 路徑；不在每次開頁重跑 |
+| **關於** | app 版本、`.work/` 目錄路徑 + 開啟按鈕（透過 `shell:revealWorkDir` lazy mkdir）、GitHub 連結（`GITHUB_PUBLIC` flag-gated，repo 公開前為 disabled placeholder）|
+
+### 1.7 Log 系統
+
+| 項目 | 說明 |
+|------|------|
+| **描述** | session-based 結構化 log，輔助使用者回報問題 |
+| **session ID** | 啟動時生成 8-hex 字元 ID，失敗 banner 顯示 `#xxxxxxxx` 給使用者報問題用 |
+| **Log 等級** | `debug` / `info`（預設）/ `warn` / `error`；`level` filter 過濾 write，但 **error 永遠不被 filter 擋**（保留 lazy-open 安全網：停用時遇例外仍能 flush ring buffer 寫檔）|
+| **啟用來源** | settings.logging.enabled / CLI flag / env var / `logs/.enabled` marker，任一觸發即啟用 |
+| **密碼遮罩** | `log-redact.ts` 遞迴遮罩；`FORBIDDEN_ENV` Set 列出禁止寫入的環境變數名（`EXPORT_PASSWORD` / `KEY_PASSWORD` / `PFX_PASSWORD` / `*_STORE_PASS` 等）|
+| **Rotation** | 14 檔 / 10MB；超過自動輪替 |
+| **Lazy open** | 停用狀態下保留 in-memory ring buffer（最近 N 筆）；首次 error 才開檔寫入並 flush buffer。確保「平常不寫檔」+「真出事有跡可查」|
 
 ---
 
@@ -91,38 +130,47 @@
 ### 2.1 可攜性（Portability）
 
 - 程式為**免安裝**的可攜式應用，整個資料夾即為完整程式
-- 不寫入 Windows Registry、AppData 或任何程式資料夾外的位置（使用者指定的輸出路徑除外）
-- 不依賴使用者系統上已安裝的任何軟體（OpenSSL、Java 等）
-- 若執行流程需要暫存資料夾，只能建立於 `PKCS12_Converter.exe` 同層的 `.work/` 工作區，不可建立於系統暫存目錄、`resources/app/` 內，或程式資料夾外
+- 不寫入 Registry、AppData 或任何程式資料夾外的位置（使用者指定的輸出路徑除外）
+- 不依賴使用者系統上已安裝的任何軟體
+- 暫存資料夾僅建立於 exe 同層的 `.work/`，不可使用系統 temp、`resources/app/` 內或程式資料夾外
+- `settings.json` 落於 exe 同層；不含密碼欄位
+- 提供兩種 portable 打包：單檔自解壓 `.exe` + 解壓即用 `.zip`（`electron-builder.yml` 雙 target）
 
 ### 2.2 安全性
 
-- **密碼不落地**：使用者輸入的所有密碼僅存在於記憶體中，不寫入任何暫存檔
-- **密碼傳遞策略**：密碼傳入子程序時，依引擎區分處理方式：
-  - **OpenSSL**：使用 `-passin env:VAR_NAME` / `-passout env:VAR_NAME` 語法，密碼透過 `child_process.execFile` 的 `env` 選項注入為環境變數。環境變數僅對該子程序可見，不出現在 process argument list 中，避免被其他程序透過 Task Manager 或 `wmic process` 讀取
-  - **Keytool**：Keytool 不支援環境變數或 stdin 傳遞密碼，密碼必須以 command-line argument 傳入（`-srcstorepass`、`-deststorepass` 等）。此為 Keytool 的設計限制，程式透過 `execFile`（非 shell）呼叫以降低暴露風險，但密碼仍可能短暫出現於 process argument list 中
-- **暫存檔清理**：若操作過程中產生暫存檔，操作完成或失敗後必須立即刪除
-- **無網路存取**：程式全程離線運作，不得發出任何網路請求
-- **密碼輸入遮罩**：密碼欄位預設遮罩顯示，可切換明文
-- **指令注入防護**：不得以 shell 字串拼接 OpenSSL / Keytool 指令。所有外部命令一律使用 `execFile` 與參數陣列呼叫；對輸入只做合法性驗證，不做會改變實際值的 shell escape
+- **密碼不落地**：密碼僅存記憶體
+- **密碼傳遞**：
+  - **OpenSSL**：`-passin env:VAR_NAME` / `-passout env:VAR_NAME`，透過 `execFile` 的 `env` 注入；不出現在 argv
+  - **Keytool**：限制使然，密碼以 argv 傳入（`-srcstorepass` 等）；以 `execFile`（非 shell）呼叫降低暴露
+- **execFile only**：所有 OpenSSL/Keytool 呼叫一律 `execFile` 與 argv 陣列；輸入只做合法性驗證，不做改變值的 shell escape
+- **暫存檔清理**：`TempFileManager` finally + `app.on("will-quit")` 雙重保險；cleanup 改 `readdirSync` 確認空才 `rmdirSync`，不再強刪共用 workDir 內非自己 track 的檔案
+- **CJK / 非 ASCII 路徑**：使用者選擇的路徑**永不直接送進 OpenSSL/Keytool argv**（OpenSSL 3.x 在 Windows 對 `OSSL_STORE` loader 的 `-in <非ASCII>` 拋 `Illegal byte sequence`）。輸入透過 `fs.readFile` 走 Win32 wide-char API 讀為 Buffer 後 stdin pipe；輸出走 `withSafeOutputPath`（`.work/` ASCII 暫存 + `fs.rename`，跨磁碟 `EXDEV` 退回 `copyFile + unlink`）。DER 二進位無法走 stdin（CRT text-mode 把 `\x1A` 當 EOF），改 stage 到 `.work/<outPath>.in.der` 後 `-in` 餵 ASCII path
+- **Keytool CJK**：`-J-Dsun.jnu.encoding=UTF-8` 解 `Bad pathname`；`-J-Dstdout.encoding=UTF-8` / `-J-Dstderr.encoding=UTF-8` 解中文 alias mojibake
+- **無網路存取**：零 telemetry、零更新檢查、零外部資源
+- **shell:openExternal allow-list**：唯一允許的外連 host 為 `https://github.com`
+- **密碼輸入遮罩**：預設遮罩，可切明文
+- **指令注入防護**：不得以 shell 字串拼接
 
 ### 2.3 效能
 
-- 一般大小的憑證檔案（< 10KB）操作應在 **3 秒內** 完成
-- UI 執行命令時須顯示進度指示（spinner / progress），不可凍結介面
-- OpenSSL / Keytool 子程序需設定 timeout（建議 30 秒），逾時須終止並提示
+- 一般大小檔案（< 10KB）操作應在 **3 秒內**完成
+- UI 執行命令時須顯示進度指示，不可凍結介面
+- OpenSSL 子程序 timeout **40 秒**（M1.5 從 30 秒上調，避免 keytool 冷啟動逾時誤判）
+- Keytool 子程序 timeout **40 秒**
 
 ### 2.4 可用性
 
-- 介面須有明確的功能分區（Tab 或側邊選單）
-- 每個功能頁面提供操作說明提示
-- 檔案選擇一律使用系統原生檔案對話框
-- 錯誤訊息須以使用者可理解的中文呈現，避免直接顯示原始 stderr
+- 介面 5 個功能 Tab + 1 個 Settings 入口（sidebar 次要樣式 `.meta-link`，不做成 Tab）
+- 檔案選擇一律使用系統原生對話框
+- 錯誤訊息以使用者可理解的中文（或英 / 日）呈現，避免直接顯示原始 stderr；service `message` 帶 i18n key（`error.*` / `common.*`），原始 stderr 移到 `details`
+- 必填欄位以紅點標示（`role=img` + `aria-label` + `title` tooltip）；紅點靠 input 欄左邊固定
+- Row label 支援 i18n string 內嵌 `\n` 控制換行 + `text-wrap: balance` 自動平衡
 
-### 2.5 可擴充性
+### 2.5 可擴充性與 i18n
 
-- 預留多語系（i18n）架構，初版僅實作繁體中文
-- 前後端分離架構，未來可替換 UI 層或抽換引擎
+- vue-i18n 多語系：**繁體中文 zh-TW / 英文 en / 日本語 ja**（ja 從 en 翻譯而非中文，避開硬譯感）
+- 三語系 JSON schema 同步維護；未用 key 定期清理
+- 前後端分離；引擎可換版本（`engines/README.md` 記錄第三方來源與 jlink 裁剪指令）
 
 ---
 
@@ -130,125 +178,146 @@
 
 ### 3.1 整體架構
 
-| 層級 | 選型 | 理由 |
-|------|------|------|
-| **UI 層** | Electron + HTML/CSS/JS | 符合使用者選擇；UI 彈性高，可做出友善引導式介面 |
-| **前端框架** | Vue 3 + Vite | 輕量、學習曲線低、單檔元件適合工具型應用 |
-| **後端邏輯** | Electron Main Process (Node.js) | 負責呼叫 OpenSSL / Keytool 子程序、檔案 I/O |
-| **加密引擎** | 預編譯 OpenSSL（Windows x64） | 隨程式資料夾攜帶，使用者免安裝 |
-| **JKS 引擎** | 預編譯 OpenJDK Keytool + 最小 JRE | 僅攜帶 `bin/keytool` 及必要的 JRE runtime |
-| **多語系** | vue-i18n | 與 Vue 3 整合良好，支援語系檔熱切換 |
-| **打包** | electron-builder | 打包為免安裝的 portable 資料夾結構 |
+| 層級 | 選型 | 版本 | 理由 |
+|------|------|------|------|
+| **UI 層** | Electron | 33.x | 跨 Win 桌面、UI 彈性高 |
+| **前端框架** | Vue 3 + Vite | Vue 3.5 / Vite 6 | 輕量、單檔元件 |
+| **語言** | TypeScript | 5.7 | 型別安全 |
+| **多語系** | vue-i18n | 10.x | 與 Vue 3 整合 |
+| **打包** | electron-builder | 25.x | portable target（exe + zip 雙 target）|
+| **測試** | vitest | 2.x | 快速、與 Vite 共用 config |
+| **加密引擎** | 預編譯 OpenSSL（Windows x64） | 3.5.0 (FireDaemon) | 隨 portable 攜帶 |
+| **JKS 引擎** | 預編譯 Keytool + 最小 JRE | Adoptium Temurin 21 + jlink | 隨 portable 攜帶 |
 
-### 3.2 目錄結構
+目標平台：Windows 10 / 11 x64
 
-**原始碼結構（開發中）：**
+### 3.2 目錄結構（實作）
+
+**原始碼結構：**
 
 ```
 src/
-├── main/
+├── main/                       # Electron main process
 │   ├── index.ts
-│   ├── ipc-handlers.ts
-│   ├── preload.ts
+│   ├── ipc-handlers.ts         # IPC routing + guard wrapper（含並行鎖）
+│   ├── preload.ts              # contextBridge API
 │   ├── engines/
-│   │   ├── openssl-runner.ts
-│   │   ├── keytool-runner.ts
-│   │   └── output-parser.ts
+│   │   ├── openssl-runner.ts   # execFile + 40s timeout + env 密碼注入 + parent PASSWORD env 過濾
+│   │   ├── keytool-runner.ts   # execFile + 40s timeout + UTF-8 / English locale JVM flags
+│   │   └── output-parser.ts    # cert/key parser, classifyError, splitPemCerts
 │   ├── services/
-│   │   ├── merge-service.ts
-│   │   ├── extract-service.ts
-│   │   ├── view-service.ts
-│   │   └── convert-service.ts
+│   │   ├── chain-builder.ts    # PEM/DER 解析、去重、AKI/SKI 鏈建構、warnings
+│   │   ├── merge-service.ts    # precheck token + merge
+│   │   ├── extract-service.ts  # legacy auto-retry + merged/split
+│   │   ├── view-service.ts     # 結構化解析（含 PKCS#12 結構資訊）
+│   │   ├── convert-service.ts  # JKS↔P12 + legacy PFX 自動重包
+│   │   ├── error-mapper.ts     # OpenSSL/Keytool error → i18n key
+│   │   ├── settings-service.ts # settings.json 讀寫
+│   │   └── engine-info-service.ts # openssl/keytool 版本快取
 │   └── utils/
 │       ├── path-resolver.ts
-│       ├── sanitizer.ts
-│       └── temp-file.ts
+│       ├── sanitizer.ts        # ValidationFailureCode + 實際 create+delete write probe
+│       ├── temp-file.ts        # .work/ 管理（readdir 確認空才 rmdir）
+│       ├── safe-path.ts        # withSafeOutputPath / readFileForOpenssl / stageInputForCli
+│       ├── logger.ts           # session-based + lazy-open + level filter
+│       ├── log-redact.ts       # 遞迴密碼遮罩 + FORBIDDEN_ENV
+│       └── log-rotate.ts       # 14 檔 / 10MB
 ├── renderer/
+│   ├── App.vue                 # 5 Tab + Settings sidebar + lang select
 │   ├── main.ts
-│   ├── App.vue
-│   ├── components/
-│   ├── pages/
+│   ├── pages/                  # MergePage / ExtractPage / ViewPage / JksToP12Page / P12ToJksPage / SettingsPage
+│   ├── components/             # FileSelector / MultiFileField / PasswordField / WarningDialog / ResultDisplay / CertificateCard / KeyInfoCard / AliasPicker / Row / LanguageSelect / Icon
+│   ├── stores/
+│   │   └── handoff.ts          # reactive singleton + 60s TTL + tab scrub cleanup
 │   ├── i18n/
-│   └── locales/
-│       ├── zh-TW.json
-│       └── en.json
-└── types/
-    └── index.ts
+│   ├── locales/
+│   │   ├── zh-TW.json
+│   │   ├── en.json
+│   │   └── ja.json
+│   └── assets/
+│       └── app-icon.svg
+└── types/                      # 共用 domain types
+tests/
+└── smoke/                      # IPC handler smoke tests
+build/
+├── icon.svg                    # source of truth
+├── icon.ico                    # multi-size 16~256
+└── icon.png
+scripts/
+└── build-icon.mjs              # sharp + png-to-ico pipeline
+engines/
+├── openssl/                    # OpenSSL 3.5.0（gitignore，引擎本地放置）
+└── jre-minimal/                # Temurin 21 + jlink 裁剪
 ```
 
 **打包後結構：**
 
 ```
 PKCS12_Converter/
-├── PKCS12_Converter.exe          # Electron 主程式
-├── .work/                        # 唯一允許的暫存工作區（執行時建立，結束後清理）
+├── PKCS12_Converter.exe
+├── settings.json               # 使用者主動改設定才生成
+├── .work/                      # 暫存（lazy mkdir，結束清理）
+├── logs/                       # log 啟用時生成
 ├── resources/
-│   └── app/                      # 前端打包檔案
-├── engines/
-│   ├── openssl/
-│   │   ├── openssl.exe
-│   │   ├── libssl-3-x64.dll
-│   │   └── libcrypto-3-x64.dll
-│   └── jre-minimal/
-│       ├── bin/
-│       │   ├── java.exe
-│       │   └── keytool.exe
-│       └── lib/                  # 最小化 JRE runtime
+│   ├── app/
+│   └── engines/                # extraResources 打包進來
+│       ├── openssl/
+│       └── jre-minimal/
 └── LICENSE
 ```
 
-### 3.3 預編譯引擎來源建議
+### 3.3 預編譯引擎來源
 
-| 引擎 | 建議來源 | 說明 |
-|------|----------|------|
-| OpenSSL | [Shining Light Productions](https://slproweb.com/products/Win32OpenSSL.html) 或 [FireDaemon OpenSSL](https://kb.firedaemon.com/support/solutions/articles/4000121705) | 提供 Windows x64 預編譯版本，可擷取所需 exe + dll |
-| Keytool / JRE | [Adoptium (Eclipse Temurin)](https://adoptium.net/) | 使用 `jlink` 裁剪出最小 JRE，僅包含 `java.base` 和 `java.security` 模組 |
+| 引擎 | 來源 | 說明 |
+|------|------|------|
+| OpenSSL | [FireDaemon OpenSSL](https://kb.firedaemon.com/support/solutions/articles/4000121705) 3.5.0 | 含 `legacy.dll`（OpenSSL 3.x legacy provider） |
+| Keytool / JRE | [Adoptium Temurin](https://adoptium.net/) 21 + `jlink` | 模組裁剪：`java.base, java.logging, java.security.sasl, java.naming, jdk.crypto.ec, jdk.crypto.cryptoki, jdk.localedata`（注意 `java.security` 模組不存在；`java.security.sasl` 才是模組名） |
+
+baseEnv 強制 `OPENSSL_MODULES=<engines/openssl/ossl-modules>` + `OPENSSL_CONF=""`。詳見 `engines/README.md`。
 
 ---
 
 ## 4. 資料模型
 
-本工具為檔案處理工具，不涉及資料庫。以下為主要領域物件：
-
 ### 4.1 核心 Entity
 
 ```
 ┌─────────────────────┐
-│   OperationRequest   │  每次使用者操作對應一個 Request
+│   OperationRequest   │
 ├─────────────────────┤
 │ type: OperationType  │  (MERGE | EXTRACT | VIEW | JKS_TO_P12 | P12_TO_JKS)
 │ inputFiles: File[]   │
 │ outputPath: string   │
 │ passwords: object    │
-│ options: object      │  (含 algorithm, certOutputMode, legacyMode 等)
-│ nextAction?: string  │  (操作串接：'convertToJks' | 'extractKeys' 等)
+│ options: object      │  (algorithm, certOutputMode, legacyMode, aliasFilter 等)
+│ nextAction?: string  │  (操作串接)
 └────────┬────────────┘
-         │ 產生
          ▼
-┌─────────────────────┐
-│  OperationResult     │
-├─────────────────────┤
-│ success: boolean     │
-│ outputFiles: File[]  │
-│ message: string      │
-│ details: object      │  (VIEW / 預檢結果等)
-│ warnings?: OperationWarning[] │  (需顯示給使用者的警告)
-│ requiresConfirmation?│  (是否需使用者確認後才能繼續)
-└──────────────────────┘
+┌─────────────────────────────┐
+│  OperationResult             │
+├─────────────────────────────┤
+│ success: boolean             │
+│ outputFiles: File[]          │
+│ message: string              │  (i18n key, e.g. "error.passwordIncorrect")
+│ details: object              │  (原始 stderr / VIEW 結果 / aliases)
+│ warnings?: OperationWarning[]│
+│ requiresConfirmation?        │
+└──────────────────────────────┘
 ```
 
 ### 4.2 憑證資訊模型（VIEW 功能用）
 
 ```typescript
 interface CertificateInfo {
-  subject: string;          // 主體 (CN, O, OU 等)
-  issuer: string;           // 發行者
-  serialNumber: string;     // 序號
-  notBefore: string;        // 有效期起
-  notAfter: string;         // 有效期迄
+  subject: string;
+  issuer: string;
+  serialNumber: string;
+  notBefore: string;
+  notAfter: string;
   signatureAlgorithm: string;
-  subjectAltNames: string[]; // SAN
-  subjectKeyIdentifier: string; // 主體金鑰識別碼 (SKI)
+  subjectAltNames: string[];
+  subjectKeyIdentifier: string;
+  publicKeyFingerprintSha256: string;  // SPKI SHA-256
   fingerprint: {
     sha1: string;
     sha256: string;
@@ -257,18 +326,35 @@ interface CertificateInfo {
 
 interface PrivateKeyInfo {
   algorithm: string;        // RSA, EC 等
-  keySize: number;          // 位元長度
+  keySize: number;
   encrypted: boolean;
+  publicKeyFingerprintSha256: string;  // 對應 cert 的 SPKI 指紋
+}
+
+interface Pkcs12StructureInfo {
+  generation: 'modern' | 'legacy';
+  mac: { algorithm: string; iteration: number } | null;
+  bags: Array<{
+    type: string;            // shrouded keyBag / certBag / etc.
+    scheme?: string;
+    kdf?: string;
+    cipher?: string;
+    prf?: string;
+    iteration?: number;
+    friendlyName?: string;
+    localKeyId?: string;
+  }>;
 }
 
 interface Pkcs12ViewResult {
   privateKey: PrivateKeyInfo | null;
   serverCert: CertificateInfo | null;
   chainCerts: CertificateInfo[];
+  structure: Pkcs12StructureInfo;
 }
 ```
 
-### 4.3 警告與預檢模型
+### 4.3 警告與預檢查模型
 
 ```typescript
 type WarningCode =
@@ -277,17 +363,23 @@ type WarningCode =
   | 'CHAIN_HAS_DUPLICATE_CERTS'
   | 'CHAIN_HAS_ANCHOR'
   | 'CHAIN_NOT_LINKED'
-  | 'LEGACY_MODE_UNCERTAIN';
+  | 'LEGACY_MODE_UNCERTAIN'
+  | 'PKCS12_MULTIPLE_ALIASES';
 
 interface OperationWarning {
   code: WarningCode;
-  message: string;
+  message: string;          // i18n key
   requiresConfirmation: boolean;
-  details?: Record<string, unknown>;
+  details?: Record<string, unknown>;  // e.g. { subjects: string[] } / { aliases: AliasEntry[] }
+}
+
+interface AliasEntry {
+  name: string;
+  entryType: 'PrivateKeyEntry' | 'trustedCertEntry';
 }
 
 interface MergePrecheckResult {
-  precheckToken: string;          // SHA-256 hash，見下方說明
+  precheckToken: string;
   keyMatchesCert: boolean;
   normalizedChainCerts: CertificateInfo[];
   droppedChainCerts: CertificateInfo[];
@@ -295,58 +387,73 @@ interface MergePrecheckResult {
 }
 ```
 
-**precheckToken 生成與驗證邏輯：**
+`precheckToken`：SHA-256 hex digest of「絕對路徑 + 檔案大小（bytes）+ mtime（ms）」按固定順序串接。
 
-`precheckToken` = SHA-256 hex digest of：將所有輸入檔案（keyFile、certFile、chainFiles[]）依固定順序，各取「絕對路徑 + 檔案大小（bytes）+ mtime（ISO 8601 字串）」串接後計算。正式執行合成時，以相同邏輯重新計算並與帶入的 token 比對；不一致則拒絕執行，要求重新 precheck。
+### 4.4 設定模型
+
+```typescript
+interface AppSettings {
+  logging: {
+    enabled: boolean;       // 預設 true；變更下次啟動生效
+    level: 'debug' | 'info' | 'warn' | 'error';  // 預設 info；runtime 即時生效
+  };
+  locale: 'zh-TW' | 'en' | 'ja';
+}
+
+interface RuntimeInfo {
+  version: string;
+  sessionId: string;
+  loggingEnabled: boolean;
+  currentLogFile: string | null;
+  logsDir: string;
+  workDir: string;
+}
+
+interface EngineInfo {
+  openssl: { version: string; path: string };
+  keytool: { version: string; path: string };
+  enginesDir: string;
+}
+```
 
 ---
 
 ## 5. 應用程式架構
 
-> 注意：本工具為桌面應用程式，無 Web API 端點。以下描述 Electron 內部 IPC 通道設計。
-
 ### 5.1 IPC 通道設計（Renderer ↔ Main Process）
 
-| 通道名稱 | 方向 | 說明 | 參數 | 回傳 |
-|----------|------|------|------|------|
-| `pkcs12:merge:precheck` | Renderer → Main | 預檢合成輸入、整理鏈順序、產生警告 | `{ keyFile, certFile, chainFiles[], keyFilePassword? }` | `OperationResult<MergePrecheckResult>` |
-| `pkcs12:merge` | Renderer → Main | 合成 PKCS #12 | `{ keyFile, certFile, chainFiles[], password, outputPath, algorithm, keyFilePassword?, includeAnchorCert?, precheckToken, confirmedWarningCodes?: WarningCode[] }` | `OperationResult` |
-| `pkcs12:extract` | Renderer → Main | 抽取私鑰與憑證 | `{ pfxFile, password, outputDir, certOutputMode, legacyMode }` | `OperationResult` |
-| `pkcs12:view` | Renderer → Main | 檢視檔案資訊 | `{ pfxFile, password }` | `OperationResult<Pkcs12ViewResult>` |
-| `jks:toP12` | Renderer → Main | JKS → PKCS #12 | `{ jksFile, jksPassword, alias?, keyPassword?, outputPath, outputPassword }` | `OperationResult` |
-| `jks:fromP12` | Renderer → Main | PKCS #12 → JKS | `{ pfxFile, pfxPassword, outputPath, jksPassword }` | `OperationResult` |
-| `jks:listAliases` | Renderer → Main | 列出 JKS alias | `{ jksFile, jksPassword }` | `{ aliases: { name: string; entryType: 'PrivateKeyEntry' | 'trustedCertEntry' }[] }` |
-| `dialog:openFile` | Renderer → Main | 開啟檔案選擇器 | `{ filters, multiSelect }` | `string[]` |
-| `dialog:saveFile` | Renderer → Main | 開啟儲存對話框 | `{ filters, defaultName }` | `string` |
+| 通道名稱 | 方向 | 說明 |
+|----------|------|------|
+| `pkcs12:merge:precheck` | R → M | 預檢查合成輸入、整理鏈、產生警告，回傳 `precheckToken` |
+| `pkcs12:merge` | R → M | 合成（產製） PKCS#12（須帶 `precheckToken` + `confirmedWarningCodes`） |
+| `pkcs12:extract` | R → M | 抽取私鑰與憑證 |
+| `pkcs12:view` | R → M | 檢視檔案資訊 |
+| `jks:toP12` | R → M | JKS → PKCS#12 |
+| `jks:fromP12` | R → M | PKCS#12 → JKS（含 `aliasFilter`） |
+| `jks:listAliases` | R → M | 列出 JKS alias（含 `entryType`） |
+| `dialog:openFile` | R → M | 系統檔案選擇器 |
+| `dialog:openDirectory` | R → M | 系統資料夾選擇器 |
+| `dialog:saveFile` | R → M | 系統儲存對話框 |
+| `settings:get` | R → M | 讀 `settings.json` |
+| `settings:set` | R → M | 寫 `settings.json`（atomic）+ runtime apply log level |
+| `engines:getInfo` | R → M | 取 OpenSSL / Keytool 版本資訊 |
+| `app:getRuntimeInfo` | R → M | 取 app 版本 / sessionId / logging 狀態 / `.work` 路徑 |
+| `shell:openExternal` | R → M | 開啟外部連結（嚴格 allow-list `https://github.com`） |
+| `shell:revealWorkDir` | R → M | 開啟 `.work/`（lazy mkdir） |
+
+合計 18 channel。並行鎖：`guard()` wrapper 對重複進入相同 channel 直接 early-return。
 
 ### 5.2 Main Process 模組劃分
 
-```
-src/main/
-├── ipc-handlers.ts         # IPC 路由註冊
-├── engines/
-│   ├── openssl-runner.ts   # 封裝 OpenSSL CLI 呼叫
-│   ├── keytool-runner.ts   # 封裝 Keytool CLI 呼叫
-│   └── output-parser.ts    # 解析 OpenSSL / Keytool stdout/stderr
-├── services/
-│   ├── merge-service.ts    # 合成邏輯
-│   ├── extract-service.ts  # 抽取邏輯
-│   ├── view-service.ts     # 檢視邏輯
-│   └── convert-service.ts  # JKS 互轉邏輯
-├── utils/
-│   ├── path-resolver.ts    # 解析引擎路徑（相對於 app 目錄）
-│   ├── sanitizer.ts        # 輸入過濾與指令跳脫
-│   └── temp-file.ts        # 暫存檔管理（僅限 exe 同層 .work/；建立 + 確保清理）
-└── preload.ts              # contextBridge 暴露安全 API
-```
+見 §3.2 原始碼結構。
 
 ### 5.3 安全邊界（Context Isolation）
 
 ```
 ┌─────────────────────────────────────────────┐
 │  Renderer Process (Vue 3)                    │
-│  - 不可直接存取 Node.js API                   │
-│  - 不可直接存取 fs、child_process             │
+│  - contextIsolation + sandbox 強制 enable    │
+│  - 不可直接存取 fs / child_process / Node API│
 │  - 透過 contextBridge 暴露的 API 與 Main 溝通  │
 └──────────────────┬──────────────────────────┘
                    │  IPC (invoke / handle)
@@ -355,111 +462,48 @@ src/main/
 │  - 執行 OpenSSL / Keytool 子程序              │
 │  - 所有檔案 I/O 操作                          │
 │  - 輸入驗證與指令組裝                          │
+│  - settings.json / log 寫入                  │
 └─────────────────────────────────────────────┘
 ```
+
+`autoHideMenuBar: true` + `Menu.setApplicationMenu(null)` 移除 application menu bar（雙重保險）。
 
 ---
 
 ## 6. 里程碑拆分
 
-### M1：核心 PKCS #12 操作（合成 + 抽取 + 檢視）
+### M1 — 核心 PKCS#12 操作 ✅
 
-**交付物：**
-- Electron 專案基礎架構搭建（含 Vue 3、i18n 骨架）
-- OpenSSL 引擎整合（openssl-runner）
-- 功能 1.1 合成 PKCS #12
-- 功能 1.2 抽取私鑰與憑證
-- 功能 1.3 檢視 PKCS #12 資訊
-- 錯誤處理與中文訊息
-- 暫存檔安全清理機制
+合成（產製） / 抽取 / 檢視三大功能 + Electron/Vue scaffold + IPC 全接線 + portable 打包驗證。100/100 測試通過。
 
-**驗收條件：**
-- 可成功合成 → 抽取 → 再檢視，完成一輪完整操作
-- 密碼錯誤、檔案不匹配等異常情境皆有友善提示
-- 合成前可檢查中繼憑證是否成鏈；順序錯誤但可成鏈時會自動重排；無法成鏈時會先警告，使用者確認後仍可完成強制合成
-- chain 中若含 self-signed root 會警告使用者為 anchor；chain 中若含無關或重複憑證會提示並於合成時自動忽略
-- 抽取功能在 `legacyMode=auto` 無法判定時，會要求使用者以 `on` 或 `off` 重新執行，而不是直接失敗
+### M1.5 — 收尾技術債 ✅
 
-**M1 詳細 Todo List：**
-- 初始化 Electron + Vue 3 + Vite 專案，確認 dev mode 可啟動空白視窗
-- 建立 `preload` 與 `contextBridge` 骨架，確保 Renderer 不可直接存取 Node API
-- 建立 `src/main/ipc-handlers.ts` 與 IPC 註冊骨架，先接上最小假資料 handler
-- 建立 `src/main/services/`、`src/main/engines/`、`src/main/utils/` 目錄與空模組
-- 建立繁體中文 i18n 骨架與最小語系檔
-- 建立 exe 同層 `.work/` 工作區解析邏輯
-- 實作 OpenSSL 引擎路徑解析，能正確找到 bundled binary
-- 實作共用 `execFile` runner，統一 timeout、stdout/stderr、exit code 包裝
-- 實作共用輸入驗證工具：檔案存在、路徑合法、密碼非空
-- 實作 `.work/` 暫存檔工具：建立、追蹤、清理
-- 實作 PEM/DER 憑證讀取與 DER 轉 PEM 工具
-- 實作 OpenSSL 錯誤 parser 最小版，先支援常見密碼/格式錯誤
-- 實作私鑰與伺服器憑證匹配檢查
-- 實作 chain 憑證解析、去重、無關憑證過濾
-- 實作 chain 重排邏輯，輸出 normalized chain
-- 實作 anchor、unlinked chain、extra cert、duplicate cert warnings
-- 實作 `pkcs12:merge:precheck` IPC 與 `precheckToken` 回傳
-- 實作 `pkcs12:merge`，驗證 `precheckToken` 與 `confirmedWarningCodes`
-- 實作合成 `.pfx/.p12` 的 OpenSSL 命令與成功結果回傳
-- 實作合成頁 UI：檔案選擇、密碼輸入、precheck 警告確認、執行按鈕
-- 實作合成成功後的「轉換為 JKS」入口占位
-- 實作抽取功能的 `legacyMode=auto/on/off` 參數流
-- 實作 auto legacy 判定流程與 `LEGACY_MODE_UNCERTAIN` 警告
-- 實作私鑰抽取為無加密 `.key`
-- 實作伺服器憑證與 CA 憑證抽取
-- 實作合併模式輸出單一 `.pem`
-- 實作拆分模式輸出 `server.crt`、`ca-1.crt`、`ca-2.crt`
-- 實作抽取頁 UI：模式切換、legacy 模式選擇、輸出目錄選擇
-- 實作抽取完成結果呈現與輸出檔清單
-- 實作 `pkcs12:view` OpenSSL 命令封裝
-- 實作 private key 基本資訊 parser
-- 實作 server cert 欄位 parser：subject、issuer、validity、serial
-- 實作 SAN、SKI、SHA1/SHA256 fingerprint parser
-- 實作 chain certs 陣列輸出 parser
-- 實作檢視頁 UI，結構化呈現 private key / server cert / chain certs
-- 實作檢視功能的密碼錯誤與格式錯誤中文訊息
-- 建立統一 `OperationResult` / `OperationWarning` 映射邏輯
-- 建立 OpenSSL 常見錯誤到中文訊息的對照表
-- 驗證所有流程在成功、失敗、取消時都會清理 `.work/`
-- 驗證密碼與敏感資料不落地、不寫 log
-- 驗證 Renderer 無法直接呼叫 `fs` / `child_process`
-- 補一組 merge happy path smoke test
-- 補一組 merge warning path smoke test（重排、忽略無關/重複）
-- 補一組 merge force path smoke test（anchor、unlinked chain）
-- 補一組 extract happy path smoke test
-- 補一組 extract legacy path smoke test
-- 補一組 view happy path smoke test
-- 補一組失敗情境 smoke test（密碼錯誤、檔案不存在、格式錯誤、timeout）
-- 補一組 `.work/` 清理 smoke test
+`dialog:openDirectory` 新 channel；timeout 30→40s；三頁 catch 統一走 `error.internalError`；並行操作 early-return guard；Keytool 錯誤 pattern 補強。
 
----
+### M2 — JKS↔P12 + Log 系統 ✅
 
-### M2：JKS 互轉功能
+Keytool runner（強制英文 locale + 40s timeout）、convert-service、JKS 3 IPC、JKS UI、handoff store 操作串接、roundtrip smoke test。Log 系統含 sessionId / lazy open / redact / rotate。138/138 測試通過。
 
-**交付物：**
-- Keytool / 最小 JRE 整合
-- 功能 1.4 JKS → PKCS #12
-- 功能 1.5 PKCS #12 → JKS
-- JKS alias 列表與選擇 UI
+### M2.1 — 收尾技術債 ✅
+
+service 訊息全面 i18n key 化；P12→JKS 多 alias 強制使用者選擇；handoff payload 60s TTL + tab scrub；P12→JKS legacy PFX 自動重包。
+
+### M3 — UI polish + 實機驗收 + Settings + 公開前置 ✅
+
+第一輪實機 13 項分 5 批修正、第二輪驗收全綠、CJK 路徑全域 bug 一勞永逸修復（safe-path + stdin Buffer）、app icon、Settings Tab、ja 語系、首次 push GitHub、portable 雙 target（exe + zip）。172/172 測試通過。
+
+**剩餘工作：**
+
+- code signing 評估（採購 EV/OV vs 不簽 → SmartScreen 警示）
+- 清機 Win10/11 VM 安裝測試
+- 人類版 `README.md`（簡潔對外）
+- 首次 GitHub Releases 上傳
+- 翻 `GITHUB_PUBLIC` flag（repo 公開後）
 
 **驗收條件：**
-- 可成功完成 JKS ↔ PKCS #12 雙向轉換
-- 多 alias 的 JKS 檔案可正確列出並選擇
-- 所有 JKS 轉換皆以非互動模式執行；`PKCS #12 → JKS` 的輸出 alias 固定為 `1`
 
----
-
-### M3：打磨與打包
-
-**交付物：**
-- UI 美化與操作引導優化
-- i18n 架構確認（繁體中文語系檔完整）
-- electron-builder 打包為 portable 資料夾
-- 最終測試（含各種憑證格式、邊界案例）
-- 使用者操作手冊（內建於程式中）
-
-**驗收條件：**
-- 打包後的資料夾可在乾淨 Windows 10 上直接執行
-- 程式資料夾外無殘留檔案
+- 打包後資料夾可在乾淨 Windows 10/11 上直接執行
+- 程式資料夾外無殘留檔案（除使用者指定輸出）
 - 五項核心功能全數通過驗收
 
 ---
@@ -468,21 +512,24 @@ src/main/
 
 ### 風險
 
-| # | 風險 | 影響 | 緩解措施 |
-|---|------|------|----------|
-| R1 | **預編譯 OpenSSL 版本相容性** — 不同來源的預編譯版本可能有 DLL 相依問題 | 程式無法啟動或執行失敗 | 在乾淨 VM 上驗證；必要時附帶 VC++ Runtime |
-| R2 | **最小化 JRE 體積過大** — 即使用 jlink 裁剪，JRE 仍可能佔 40-80 MB | 整體打包體積偏大 | 評估是否可接受；或考慮僅攜帶 keytool + 必要 jar |
-| R3 | **Electron 打包體積** — Electron 本身約 150-200 MB | 整體程式可能超過 250 MB | 若體積不可接受，備案可考慮改用 Tauri（Rust + WebView2） |
-| R4 | **OpenSSL 指令注入** — 使用者輸入的檔案路徑或密碼若含特殊字元可能被利用 | 安全漏洞 | 所有輸入經 sanitizer 處理；使用 `execFile`（非 `exec`）避免 shell 解析 |
-| R5 | **Windows Defender / 防毒誤報** — 未簽章的 exe 可能被攔截 | 使用者無法執行 | 考慮申請程式碼簽章憑證；提供排除說明文件 |
+| # | 風險 | 影響 | 緩解措施 | 狀態 |
+|---|------|------|----------|------|
+| R1 | 預編譯 OpenSSL 版本相容性（DLL 相依） | 程式無法執行 | 使用 FireDaemon 3.5.0 + 強制 `OPENSSL_MODULES` / `OPENSSL_CONF=""`；`legacy.dll` 一併攜帶 | ✅ 已處理 |
+| R2 | 最小化 JRE 體積 | 整體打包偏大 | jlink 6 模組裁剪後約 50MB；portable 可接受 | ✅ 已處理 |
+| R3 | Electron 打包體積（150-200MB） | 程式可能 > 250MB | portable exe 約 100MB；客戶接受 | ✅ 已處理 |
+| R4 | OpenSSL 指令注入 | 安全漏洞 | 全程 `execFile` + argv 陣列；輸入只做合法性驗證 | ✅ 已處理 |
+| R5 | Windows Defender / 防毒誤報（未簽章） | 使用者無法執行 | M3 收尾評估 EV/OV 簽章；提供排除說明 | ⏳ 評估中 |
+| R6 | OpenSSL 3.x Windows CJK 路徑 `Illegal byte sequence` | merge 不論對錯都顯示「私鑰與憑證不符」 | 一勞永逸：使用者路徑永不入 argv，輸入走 stdin Buffer pipe，輸出走 `.work/` ASCII 暫存 + `fs.rename` | ✅ 已處理（Session #20）|
+| R7 | Keytool CJK alias / pathname 問題 | 中文 alias mojibake / `Bad pathname` | JVM flags `-J-Dsun.jnu.encoding=UTF-8` + `-J-Dstdout/stderr.encoding=UTF-8` | ✅ 已處理 |
 
 ### 假設
 
 | # | 假設 | 說明 |
 |---|------|------|
-| A1 | 目標平台為 **Windows 10 / 11 x64** | 不支援 32 位元或其他作業系統 |
-| A2 | 使用者具有基本的憑證概念 | 知道什麼是私鑰、憑證、PFX，但不熟 CLI 操作 |
-| A3 | 輸入檔案為合法的 PEM / DER / PFX / JKS 格式 | 程式做基本格式驗證，但不處理嚴重損毀的檔案 |
-| A4 | OpenSSL 版本使用 3.x 系列 | 指令語法以 OpenSSL 3.x 為準 |
-| A5 | 程式以一般使用者權限執行 | 不需要系統管理員權限 |
-| A6 | 單一使用者操作 | 不考慮多人同時操作同一份程式的情境 |
+| A1 | 目標平台為 **Windows 10 / 11 x64** | 不支援 32 位元或其他 OS |
+| A2 | 使用者具基本憑證概念 | 知道私鑰、憑證、PFX，但不熟 CLI |
+| A3 | 輸入檔案為合法 PEM / DER / PFX / JKS | 程式做基本格式驗證，不處理嚴重損毀檔 |
+| A4 | OpenSSL 使用 3.x 系列（實際 3.5.0） | 指令以 OpenSSL 3.x 為準（`-noenc` 取代 `-nodes`） |
+| A5 | 程式以一般使用者權限執行 | 不需系統管理員 |
+| A6 | 單一使用者操作 | 不考慮多人同時操作同份程式 |
+| A7 | portable exe 自身位於 ASCII 路徑 | 若 exe 在 CJK 路徑，`.work/` 也會 CJK，stage / withSafeOutputPath 失效；後續可考慮啟動偵測 + GetShortPathName 8.3 fallback |
