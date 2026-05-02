@@ -518,8 +518,8 @@ service 訊息全面 i18n key 化；P12→JKS 多 alias 強制使用者選擇；
 | R2 | 最小化 JRE 體積 | 整體打包偏大 | jlink 6 模組裁剪後約 50MB；portable 可接受 | ✅ 已處理 |
 | R3 | Electron 打包體積（150-200MB） | 程式可能 > 250MB | portable exe 約 100MB；客戶接受 | ✅ 已處理 |
 | R4 | OpenSSL 指令注入 | 安全漏洞 | 全程 `execFile` + argv 陣列；輸入只做合法性驗證 | ✅ 已處理 |
-| R5 | Windows Defender / 防毒誤報（未簽章） | 使用者無法執行 | M3 收尾評估 EV/OV 簽章；提供排除說明 | ⏳ 評估中 |
-| R6 | OpenSSL 3.x Windows CJK 路徑 `Illegal byte sequence` | merge 不論對錯都顯示「私鑰與憑證不符」 | 一勞永逸：使用者路徑永不入 argv，輸入走 stdin Buffer pipe，輸出走 `.work/` ASCII 暫存 + `fs.rename` | ✅ 已處理（Session #20）|
+| R5 | Windows Defender / 防毒誤報（未簽章） | 使用者無法執行 | M3 收尾評估 EV/OV 簽章；提供排除說明 | ⏳ 研擬中 |
+| R6 | OpenSSL 3.x Windows CJK 路徑 `Illegal byte sequence` | merge 不論對錯都顯示「私鑰與憑證不符」 | 一勞永逸：使用者路徑不進 argv，輸入走 stdin Buffer pipe，輸出走 `.work/` ASCII 暫存 + `fs.rename` | ✅ 已處理（Session #20）|
 | R7 | Keytool CJK alias / pathname 問題 | 中文 alias mojibake / `Bad pathname` | JVM flags `-J-Dsun.jnu.encoding=UTF-8` + `-J-Dstdout/stderr.encoding=UTF-8` | ✅ 已處理 |
 
 ### 假設

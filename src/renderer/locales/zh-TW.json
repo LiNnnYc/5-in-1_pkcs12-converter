@@ -63,7 +63,7 @@
     "passwordMinHint": "密碼至少要 {min} 個字元"
   },
   "merge": {
-    "pageTitle": "產生 PKCS #12 檔案",
+    "pageTitle": "產製 PKCS #12 檔案",
     "crumb": "私鑰 + 伺服器憑證 + CA 憑證鏈 → .pfx/.p12",
     "statusPrechecking": "預檢查中…",
     "statusMerging": "合成中…",

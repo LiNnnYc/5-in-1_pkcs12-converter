@@ -1,7 +1,7 @@
 {
   "app": {
-    "title": "PKCS #12 コンバーター",
-    "subtitle": "5-in-1 ツールセット",
+    "title": "PKCS #12 Converter",
+    "subtitle": "5-in-1 Tool Set",
     "brandMark": "P12",
     "version": "{version} · MIT"
   },

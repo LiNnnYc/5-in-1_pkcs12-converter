@@ -258,7 +258,7 @@
     "sections": {
       "language": "Language",
       "logging": "Log",
-      "engines": "Convert Engines",
+      "engines": "Converter Engines",
       "about": "About"
     },
     "logging": {

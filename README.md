@@ -94,7 +94,7 @@ Electron 33 · Vue 3.5 · Vite 6 · TypeScript 5.7 · vue-i18n 10 · electron-bu
 
 支援 Windows 10 / 11 x64，不需系統管理員權限。
 
-> **SmartScreen 警示說明：** 目前 binary 未簽章，Windows 首次執行可能跳出「已保護您的電腦」提示，請點擊「其他資訊」→「仍要執行」。程式碼簽章評估中。
+> **SmartScreen 警示說明：** 目前 binary 未簽章，Windows 首次執行可能跳出「已保護您的電腦」提示，請點擊「其他資訊」→「仍要執行」。程式碼簽章研擬中。
 
 ### 從原始碼建置
 
