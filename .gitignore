@@ -8,9 +8,10 @@ settings.json
 # Runtime state
 logs/
 
-# 第三方 binary 引擎 — 不入 git，使用者從 GitHub Releases 下載 portable exe
-# 開發者另從 setup script 拉到本地 engines/（見 README.md）
-engines/
+# 第三方 binary 引擎 — 不入 git，最終使用者從 GitHub Releases 下載 portable exe
+# 想自己 build 的開發者照 engines/README.md 放置本地檔案
+engines/*
+!engines/README.md
 
 # Claude Code 個人設定
 .claude/
