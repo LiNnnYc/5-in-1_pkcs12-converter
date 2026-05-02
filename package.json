@@ -2,7 +2,14 @@
   "name": "5-in-1_pkcs12-converter",
   "version": "0.2.9",
   "private": true,
-  "description": "Windows desktop app for PKCS#12 generate, extract, and view workflows.",
+  "description": "Windows desktop app for PKCS#12 workflows — generate, extract, view, and JKS ↔ P12 conversion. Portable, offline, no install required.",
+  "license": "MIT",
+  "author": "LiNnnYc <linnnyc5252@gmail.com>",
+  "homepage": "https://github.com/LiNnnYc/5-in-1_pkcs12-converter",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LiNnnYc/5-in-1_pkcs12-converter.git"
+  },
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:start\"",
