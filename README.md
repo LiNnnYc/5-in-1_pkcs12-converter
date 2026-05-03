@@ -79,22 +79,22 @@ Electron 33 · Vue 3.5 · Vite 6 · TypeScript 5.7 · vue-i18n 10 · electron-bu
 
 ### 功能簡介
 
-五項常用 PKCS #12 / JKS 操作整合於單一 GUI：
+五項常用 PKCS #12 / JKS 操作整合成 GUI 界面：
 
 1. **產製** — 私鑰 + 憑證 + 中繼憑證合成為 `.pfx`（AES-256-CBC 或 PBE-SHA1-3DES）
 2. **抽取** — 從 `.pfx` 拆出私鑰與憑證（合併 `.pem` 或拆分 `.crt`）
 3. **檢視** — 檢視 `.pfx` 內容（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS #12 結構）
 4. **JKS → P12** — Java KeyStore 轉 PKCS #12（多 entry 時可挑選 alias）
-5. **P12 → JKS** — PKCS #12 轉 Java KeyStore（legacy PFX 會自動重包）
+5. **P12 → JKS** — PKCS #12 轉 Java KeyStore
 
 ### 特色
 
-- **免安裝可攜帶** — 單一資料夾、不寫 Registry、可放隨身碟執行
-- **完全離線** — 零網路請求、零 telemetry、零更新檢查
-- **內建引擎** — 程式內含 OpenSSL 3.5.0 + 最低需求的 JRE 21（使用 jlink 萃取而成），不需系統事先安裝 OpenSSL / Java
-- **密碼不落地** — 僅透過環境變數傳給 OpenSSL，不寫入任何檔案
+- **免安裝帶著走** — 單一資料夾、不會建立 Registry 註冊檔、可在隨身碟執行
+- **完全離線** — 零網路請求、零遙測、零更新檢查
+- **內建引擎** — 內含 OpenSSL 3.5.0 + 最小需求的 JRE 21（透過 jlink 抽取），不需在系統上安裝 OpenSSL / Java
+- **密碼不外洩** — 僅透過環境變數傳給 OpenSSL，不寫入硬碟（轉檔過程中會短暫存在記憶體）
 - **多語系** — 繁體中文 / English / 日本語
-- **憑證鏈事先檢查** — 合成前自動重排順序、辨識重複/無關憑證、警告 self-signed 根憑證
+- **憑證鏈預檢查** — 合成前自動重排順序、辨別重複/無關憑證、警告 self-signed 根憑證
 
 ### 下載
 
@@ -130,7 +130,7 @@ npm test             # 執行測試
 npm run package      # 打包 portable .exe + .zip 至 release/
 ```
 
-第三方引擎取得與放置方式請參閱 [`engines/README.md`](engines/README.md)。
+第三方引擎的取得與置放位置請參閱 [`engines/README.md`](engines/README.md)。
 
 ### 技術選型
 
