@@ -46,9 +46,16 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
+function detectSystemLocale(): "zh-TW" | "en" | "ja" {
+  const sys = app.getLocale().toLowerCase();
+  if (sys.startsWith("zh")) return "zh-TW";
+  if (sys.startsWith("ja")) return "ja";
+  return "en";
+}
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
-  const settings = loadSettings();
+  const settings = loadSettings(detectSystemLocale());
   initLogger({
     exeDir: resolveExeDir(),
     settingsEnabled: settings.logging.enabled,

@@ -47,11 +47,15 @@ function coerce(raw: unknown): AppSettings {
 
 let cache: AppSettings | null = null;
 
-export function loadSettings(): AppSettings {
+export function loadSettings(detectedLocale?: AppSettings["locale"]): AppSettings {
   if (cache) return cache;
   const path = settingsPath();
   if (!existsSync(path)) {
-    cache = { ...DEFAULTS, logging: { ...DEFAULTS.logging } };
+    cache = {
+      ...DEFAULTS,
+      logging: { ...DEFAULTS.logging },
+      locale: detectedLocale ?? DEFAULTS.locale
+    };
     return cache;
   }
   try {

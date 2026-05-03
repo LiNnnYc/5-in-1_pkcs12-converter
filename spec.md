@@ -105,7 +105,7 @@
 |------|------|
 | **描述** | 提供使用者設定介面，含 4 區塊：語系 / Log / 引擎資訊 / 關於 |
 | **持久化** | exe 同層 `settings.json`（atomic rename via `.tmp`）；schema `{ logging: { enabled, level }, locale }`；coerce 白名單（`debug/info/warn/error`、`zh-TW/en/ja`）。檔案不存在時用 in-memory defaults，僅在使用者主動改設定才落盤 |
-| **預設值** | `logging.enabled = true`、`logging.level = info`、`locale` 由 i18n 偵測 |
+| **預設值** | `logging.enabled = true`、`logging.level = info`、`locale` 首次啟動由 `app.getLocale()` 偵測 OS 語系（`zh*` → `zh-TW`、`ja*` → `ja`、其他 → `en`），結果僅存於記憶體；使用者主動改設定後才寫入 `settings.json` |
 | **Log 設定** | `enabled` toggle 下次啟動生效（fd / buffer 狀態反覆切換太複雜）；`level` runtime 即時生效（只是改 filter 變數）。UI 用 pending hint 區別兩者 |
 | **語系切換** | sidebar 與 SettingsPage 兩處共用 `LanguageSelect` 元件，皆綁 `i18n.global.locale`；App.vue mount 時從 settings 還原、watch locale 變動寫回 settings（用 `restoredFromSettings` flag 避免初次 hydrate 觸發 watcher） |
 | **引擎資訊** | cache 一次 `openssl version`（stdout）+ `keytool -J-version`（stderr）+ `enginesDir` 路徑；不在每次開頁重跑 |
