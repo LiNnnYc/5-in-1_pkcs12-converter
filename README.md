@@ -31,9 +31,8 @@ Five common PKCS #12 / JKS operations in one GUI:
 
 ### Download
 
-Grab the latest portable build from the [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) page. Two flavors:
+Grab the latest portable build from the [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) page:
 
-- **`PKCS12_Converter-x.y.z.exe`** — single self-extracting portable executable
 - **`PKCS12_Converter-x.y.z.zip`** — extract anywhere and run `PKCS12_Converter.exe`
 
 Windows 10 / 11 x64. No admin rights required.
@@ -68,33 +67,32 @@ Electron 33 · Vue 3.5 · Vite 6 · TypeScript 5.7 · vue-i18n 10 · electron-bu
 
 ### 功能簡介
 
-五項常用 PKCS #12 / JKS 操作整合於單一 GUI：
+五項常用 PKCS #12 / JKS 操作整合成 GUI 界面：
 
 1. **產製** — 私鑰 + 憑證 + 中繼憑證合成為 `.pfx`（AES-256-CBC 或 PBE-SHA1-3DES）
 2. **抽取** — 從 `.pfx` 拆出私鑰與憑證（合併 `.pem` 或拆分 `.crt`）
 3. **檢視** — 檢視 `.pfx` 內容（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS#12 結構）
 4. **JKS → P12** — Java KeyStore 轉 PKCS #12（多 entry 時可挑選 alias）
-5. **P12 → JKS** — PKCS #12 轉 Java KeyStore（legacy PFX 會自動重包）
+5. **P12 → JKS** — PKCS #12 轉 Java KeyStore
 
 ### 特色
 
-- **免安裝可攜式** — 單一資料夾、不寫 Registry、可放隨身碟執行
-- **完全離線** — 零網路請求、零 telemetry、零更新檢查
-- **內建引擎** — 自帶 OpenSSL 3.5.0 + 最小 JRE 21（jlink 裁剪），不需系統安裝 OpenSSL / Java
-- **密碼不落地** — 僅透過環境變數傳給 OpenSSL，不寫入任何檔案
+- **免安裝帶著走** — 單一資料夾、不會建立 Registry 註冊檔、可在隨身碟執行
+- **完全離線** — 零網路請求、零遙測、零更新檢查
+- **內建引擎** — 內含 OpenSSL 3.5.0 + 最小需求的 JRE 21（透過 jlink 抽取），不需在系統上安裝 OpenSSL / Java
+- **密碼不外洩** — 僅透過環境變數傳給 OpenSSL，不寫入硬碟（轉檔過程中會短暫存在記憶體）
 - **多語系** — 繁體中文 / English / 日本語
-- **鏈預檢** — 合成前自動重排順序、辨識重複/無關憑證、警告 self-signed root
+- **憑證鏈預檢查** — 合成前自動重排順序、辨別重複/無關憑證、警告 self-signed root
 
 ### 下載
 
-至 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 頁取得最新 portable 版本，兩種格式：
+至 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 頁面取得最新 portable 版本：
 
-- **`PKCS12_Converter-x.y.z.exe`** — 單檔自解壓 portable 執行檔
 - **`PKCS12_Converter-x.y.z.zip`** — 解壓到任意位置即可執行 `PKCS12_Converter.exe`
 
 支援 Windows 10 / 11 x64，不需系統管理員權限。
 
-> **SmartScreen 警示說明：** 目前 binary 未簽章，Windows 首次執行可能跳出「已保護您的電腦」提示，請點擊「其他資訊」→「仍要執行」。程式碼簽章研擬中。
+> **SmartScreen 警示說明：** 目前 binary 執行檔未含程式碼簽章，Windows 首次執行可能會跳出「已保護您的電腦」提示視窗，請點擊「其他資訊」→「仍要執行」。程式碼簽章研擬中。
 
 ### 從原始碼建置
 
@@ -108,7 +106,7 @@ npm test             # 執行測試
 npm run package      # 打包 portable .exe + .zip 至 release/
 ```
 
-第三方引擎取得與放置方式請參閱 [`engines/README.md`](engines/README.md)。
+第三方引擎的取得與置放位置請參閱 [`engines/README.md`](engines/README.md)。
 
 ### 技術選型
 
