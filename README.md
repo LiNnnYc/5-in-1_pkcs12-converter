@@ -27,18 +27,29 @@ Five common PKCS #12 / JKS operations in one GUI:
 - **Bundled engines** — ships with OpenSSL 3.5.0 + a minimal JRE 21 (jlink-trimmed); no system OpenSSL/Java required
 - **Passwords never touch disk** — passed to OpenSSL via environment variables only
 - **Multilingual** — Traditional Chinese / English / 日本語
-- **Chain pre-check** — automatic chain reordering, duplicate detection, anchor warnings before generating
+- **Cert Chain pre-check** — automatic chain reordering, duplicate detection, anchor warnings before generating
 
 ### Download
 
-Grab the latest portable build from the [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) page. Two flavors:
+Grab the latest portable build from the [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) page:
 
-- **`PKCS12_Converter-x.y.z.exe`** — single self-extracting portable executable
 - **`PKCS12_Converter-x.y.z.zip`** — extract anywhere and run `PKCS12_Converter.exe`
 
 Windows 10 / 11 x64. No admin rights required.
 
 > **Note on SmartScreen warnings:** the binary is currently unsigned. Windows may show a "Windows protected your PC" dialog on first run — click *More info* → *Run anyway*. Code signing is on the roadmap.
+
+### Verifying release authenticity
+
+Each release zip is signed via [Sigstore](https://www.sigstore.dev/) keyless signing through GitHub Actions. The attestation proves the artifact came from this repository's release workflow and has not been tampered with since publication.
+
+Verify with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify PKCS12_Converter-1.0.1.zip --owner LiNnnYc
+```
+
+A successful verification prints the workflow path, commit SHA, and Sigstore transparency log entry. Verification does not require the repo to be cloned.
 
 ### Build from source
 
@@ -72,29 +83,40 @@ Electron 33 · Vue 3.5 · Vite 6 · TypeScript 5.7 · vue-i18n 10 · electron-bu
 
 1. **產製** — 私鑰 + 憑證 + 中繼憑證合成為 `.pfx`（AES-256-CBC 或 PBE-SHA1-3DES）
 2. **抽取** — 從 `.pfx` 拆出私鑰與憑證（合併 `.pem` 或拆分 `.crt`）
-3. **檢視** — 檢視 `.pfx` 內容（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS#12 結構）
+3. **檢視** — 檢視 `.pfx` 內容（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS #12 結構）
 4. **JKS → P12** — Java KeyStore 轉 PKCS #12（多 entry 時可挑選 alias）
 5. **P12 → JKS** — PKCS #12 轉 Java KeyStore（legacy PFX 會自動重包）
 
 ### 特色
 
-- **免安裝可攜式** — 單一資料夾、不寫 Registry、可放隨身碟執行
+- **免安裝可攜帶** — 單一資料夾、不寫 Registry、可放隨身碟執行
 - **完全離線** — 零網路請求、零 telemetry、零更新檢查
-- **內建引擎** — 自帶 OpenSSL 3.5.0 + 最小 JRE 21（jlink 裁剪），不需系統安裝 OpenSSL / Java
+- **內建引擎** — 程式內含 OpenSSL 3.5.0 + 最低需求的 JRE 21（使用 jlink 萃取而成），不需系統事先安裝 OpenSSL / Java
 - **密碼不落地** — 僅透過環境變數傳給 OpenSSL，不寫入任何檔案
 - **多語系** — 繁體中文 / English / 日本語
-- **鏈預檢** — 合成前自動重排順序、辨識重複/無關憑證、警告 self-signed root
+- **憑證鏈事先檢查** — 合成前自動重排順序、辨識重複/無關憑證、警告 self-signed 根憑證
 
 ### 下載
 
-至 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 頁取得最新 portable 版本，兩種格式：
+至 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 頁取得最新 portable 版本：
 
-- **`PKCS12_Converter-x.y.z.exe`** — 單檔自解壓 portable 執行檔
 - **`PKCS12_Converter-x.y.z.zip`** — 解壓到任意位置即可執行 `PKCS12_Converter.exe`
 
 支援 Windows 10 / 11 x64，不需系統管理員權限。
 
-> **SmartScreen 警示說明：** 目前 binary 未簽章，Windows 首次執行可能跳出「已保護您的電腦」提示，請點擊「其他資訊」→「仍要執行」。程式碼簽章研擬中。
+> **SmartScreen 警示說明：** 目前 binary 可執行檔案未含 Code Signing 簽章，Windows 首次執行時可能會跳出「已保護您的電腦」提示，請點擊「其他資訊」→「仍要執行」。Code Signing 程式碼簽章研擬中。
+
+### 驗證 release 來源真偽
+
+每份 release zip 透過 [Sigstore](https://www.sigstore.dev/) keyless 簽章機制由 GitHub Actions 簽發 attestation，可證明該檔案出自本 repo 的 release workflow 且發布後未被竄改。
+
+使用 [GitHub CLI](https://cli.github.com/) 驗證：
+
+```bash
+gh attestation verify PKCS12_Converter-1.0.1.zip --owner LiNnnYc
+```
+
+驗證成功會顯示 workflow 路徑、commit SHA 與 Sigstore 公開透明 log 紀錄。驗證過程無需 clone 本 repo。
 
 ### 從原始碼建置
 
