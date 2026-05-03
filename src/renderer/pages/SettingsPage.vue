@@ -15,7 +15,7 @@ const LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 // Project repo URL is fixed; flip GITHUB_PUBLIC to true once the repo is public
 // to enable the link button. URL stays the same — no other code changes needed.
 const GITHUB_URL = "https://github.com/LiNnnYc/5-in-1_pkcs12-converter";
-const GITHUB_PUBLIC = false;
+const GITHUB_PUBLIC = true;
 
 const loaded = ref(false);
 const logEnabled = ref(false);
