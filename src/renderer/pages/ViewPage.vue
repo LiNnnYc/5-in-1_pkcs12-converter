@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "../components/Card.vue";
 import Row from "../components/Row.vue";
@@ -26,6 +26,17 @@ const form = reactive({
 const busy = ref(false);
 const result = ref<OperationResult<Pkcs12ViewResult> | null>(null);
 const openChainIdx = ref<Record<number, boolean>>({});
+
+watch(
+  () => form.pfxFile,
+  (next, prev) => {
+    if (next !== prev) {
+      form.pfxPassword = "";
+      result.value = null;
+      openChainIdx.value = {};
+    }
+  }
+);
 
 const pfxFilters = [
   { name: t("dialog.filters.pfx"), extensions: ["pfx", "p12"] },

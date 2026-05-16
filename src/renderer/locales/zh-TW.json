@@ -6,7 +6,7 @@
     "version": "{version} · MIT"
   },
   "nav": {
-    "merge": "合成",
+    "merge": "生成",
     "extract": "抽取",
     "view": "檢視",
     "jksToP12": "JKS → P12",

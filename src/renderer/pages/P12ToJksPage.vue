@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "../components/Card.vue";
 import Row from "../components/Row.vue";
@@ -27,18 +27,31 @@ const form = reactive({
 const state = ref<State>("idle");
 const aliases = ref<string[]>([]);
 const result = ref<OperationResult | null>(null);
+let applyingHandoff = false;
 
-watch([() => form.pfxFile, () => form.pfxPassword], () => {
-  // Any change to PFX inputs invalidates a previously-listed alias set;
-  // skip only while a network call is in flight so we don't stomp state
-  // mid-operation.
+function invalidatePickedAliases() {
   if (state.value === "listing" || state.value === "converting") return;
   if (aliases.value.length === 0 && form.alias === "" && result.value === null && state.value === "idle") return;
   aliases.value = [];
   form.alias = "";
   result.value = null;
   state.value = "idle";
-});
+}
+
+watch(
+  () => form.pfxFile,
+  (next, prev) => {
+    if (next === prev) return;
+    if (!applyingHandoff) {
+      // User swapped the PFX file: any previously typed password no longer
+      // belongs to the new file. Clear it before invalidating dependent state.
+      form.pfxPassword = "";
+    }
+    invalidatePickedAliases();
+  }
+);
+
+watch(() => form.pfxPassword, invalidatePickedAliases);
 
 onActivated(() => {
   // Pass a cleanup fn so the handoff store can clear the inherited password
@@ -50,8 +63,12 @@ onActivated(() => {
     form.pfxPassword = "";
   });
   if (payload) {
+    applyingHandoff = true;
     form.pfxFile = payload.pfxFile;
     form.pfxPassword = payload.pfxPassword;
+    nextTick(() => {
+      applyingHandoff = false;
+    });
   }
 });
 

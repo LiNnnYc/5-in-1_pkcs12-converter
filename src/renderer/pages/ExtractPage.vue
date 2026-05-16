@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, reactive, ref } from "vue";
+import { computed, nextTick, onActivated, reactive, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import Card from "../components/Card.vue";
 import Row from "../components/Row.vue";
@@ -25,6 +25,16 @@ const form = reactive({
 
 const busy = ref(false);
 const result = ref<OperationResult | null>(null);
+let applyingHandoff = false;
+
+watch(
+  () => form.pfxFile,
+  (next, prev) => {
+    if (applyingHandoff || next === prev) return;
+    form.pfxPassword = "";
+    result.value = null;
+  }
+);
 
 onActivated(() => {
   const payload = consume("extract", () => {
@@ -32,8 +42,12 @@ onActivated(() => {
     form.pfxPassword = "";
   });
   if (payload) {
+    applyingHandoff = true;
     form.pfxFile = payload.pfxFile;
     form.pfxPassword = payload.pfxPassword;
+    nextTick(() => {
+      applyingHandoff = false;
+    });
   }
 });
 
