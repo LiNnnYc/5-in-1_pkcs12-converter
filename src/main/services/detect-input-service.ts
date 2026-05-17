@@ -31,7 +31,7 @@ export async function detectInputType(
   try {
     head = await readHead(filePath, HEAD_READ_BYTES);
   } catch (e) {
-    log.warn("readHead failed", { filePath }, e as Error);
+    log.warn("readHead failed", { filePath, err: (e as Error)?.message });
     return { kind: "unknown", reason: "cannot read file head" };
   }
 
