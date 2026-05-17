@@ -17,7 +17,6 @@ export type CertificateInfo = {
   subjectKeyIdentifier?: string;
   authorityKeyIdentifier?: string;
   fingerprint: Fingerprint;
-  publicKeySha256?: string;
 };
 
 export type PrivateKeyAlgorithm = "RSA" | "EC" | "DSA" | "ED25519" | "UNKNOWN";
@@ -26,7 +25,22 @@ export type PrivateKeyInfo = {
   algorithm: PrivateKeyAlgorithm;
   keySize: number;
   encrypted: boolean;
-  publicKeySha256?: string;
+  subjectKeyIdentifier?: string;
+};
+
+export type InputKind = "pfx" | "keyUnencrypted" | "keyEncrypted" | "unknown";
+
+export type DetectInputTypeResult = {
+  kind: InputKind;
+  reason?: string;
+};
+
+export type KeyViewResult = {
+  privateKey: PrivateKeyInfo;
+};
+
+export type ViewKeyRequest = {
+  keyFile: string;
 };
 
 export type Pkcs12EncryptionInfo = {

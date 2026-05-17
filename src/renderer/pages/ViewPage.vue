@@ -10,6 +10,8 @@ import Alert from "../components/Alert.vue";
 import CertDetail from "../components/CertDetail.vue";
 import Icon from "../components/Icon.vue";
 import type {
+  InputKind,
+  KeyViewResult,
   OperationResult,
   Pkcs12BagKind,
   Pkcs12EncryptionInfo,
@@ -18,75 +20,136 @@ import type {
 
 const { t } = useI18n();
 
+// `pfxFile` is kept verbatim despite now sometimes holding a .key path:
+// renaming it would cascade through templates and is low-value churn (this
+// page is not a handoff source/sink). Treat the field as "input file".
 const form = reactive({
   pfxFile: "",
   pfxPassword: ""
 });
 
 const busy = ref(false);
+const detecting = ref(false);
 const result = ref<OperationResult<Pkcs12ViewResult> | null>(null);
+const keyResult = ref<OperationResult<KeyViewResult> | null>(null);
+const inputKind = ref<InputKind | null>(null);
+const detectError = ref<string | null>(null);
 const openChainIdx = ref<Record<number, boolean>>({});
+
+// Single detection in-flight at a time: a fast user changing files would
+// otherwise race results and stamp the wrong kind on the new file.
+let detectSeq = 0;
 
 watch(
   () => form.pfxFile,
-  (next, prev) => {
-    if (next !== prev) {
-      form.pfxPassword = "";
-      result.value = null;
-      openChainIdx.value = {};
+  async (next, prev) => {
+    if (next === prev) return;
+    form.pfxPassword = "";
+    result.value = null;
+    keyResult.value = null;
+    openChainIdx.value = {};
+    inputKind.value = null;
+    detectError.value = null;
+    if (!next) {
+      detecting.value = false;
+      return;
+    }
+    const seq = ++detectSeq;
+    detecting.value = true;
+    try {
+      const r = await window.electronAPI.detectInputType(next);
+      if (seq !== detectSeq) return; // newer pick superseded this one
+      inputKind.value = r.kind;
+      if (r.kind === "keyEncrypted") detectError.value = "error.encryptedKeyNotSupported";
+      else if (r.kind === "unknown") detectError.value = "error.unsupportedFileType";
+    } catch {
+      if (seq !== detectSeq) return;
+      inputKind.value = "unknown";
+      detectError.value = "error.unsupportedFileType";
+    } finally {
+      if (seq === detectSeq) detecting.value = false;
     }
   }
 );
 
-const pfxFilters = [
+// Accept both PFX and standalone keys; users with the same workflow folder
+// shouldn't have to switch filter to view a sibling .key.
+const inputFilters = [
+  { name: t("dialog.filters.pfxOrKey"), extensions: ["pfx", "p12", "key", "pem"] },
   { name: t("dialog.filters.pfx"), extensions: ["pfx", "p12"] },
+  { name: t("dialog.filters.key"), extensions: ["key", "pem"] },
   { name: t("dialog.filters.all"), extensions: ["*"] }
 ];
 
-const canRun = computed(
-  () => form.pfxFile.length > 0 && form.pfxPassword.length > 0 && !busy.value
-);
+const canRun = computed(() => {
+  if (busy.value || detecting.value || !form.pfxFile) return false;
+  if (inputKind.value === "pfx") return form.pfxPassword.length > 0;
+  if (inputKind.value === "keyUnencrypted") return true;
+  return false;
+});
 
 const view = computed<Pkcs12ViewResult | null>(() => {
   if (result.value?.success && result.value.details) return result.value.details;
   return null;
 });
 
+const keyView = computed<KeyViewResult | null>(() => {
+  if (keyResult.value?.success && keyResult.value.details) return keyResult.value.details;
+  return null;
+});
+
+const activeOpResult = computed<OperationResult | null>(() =>
+  inputKind.value === "keyUnencrypted" ? keyResult.value : result.value
+);
+
 const inlineStatus = computed(() => {
   if (busy.value) return t("view.statusViewing");
-  if (result.value?.success) return t("view.statusSuccess");
-  if (result.value && !result.value.success) return t("view.statusError");
+  const r = activeOpResult.value;
+  if (r?.success) return t("view.statusSuccess");
+  if (r && !r.success) return t("view.statusError");
   return "";
 });
 
 const failMessage = computed(() => {
-  const m = result.value?.message ?? "";
+  const m = activeOpResult.value?.message ?? "";
   if (!m) return "";
   if (m.startsWith("error.") || m.startsWith("common.")) return t(m);
   return m;
 });
 
-async function pickPfx() {
+const detectErrorMessage = computed(() =>
+  detectError.value ? t(detectError.value) : ""
+);
+
+async function pickInput() {
   const picked = await window.electronAPI.openFileDialog({
-    filters: pfxFilters,
-    title: t("dialog.selectPfx")
+    filters: inputFilters,
+    title: t("dialog.selectPfxOrKey")
   });
   if (picked && picked[0]) form.pfxFile = picked[0];
 }
 
 async function run() {
-  if (busy.value) return;
+  if (busy.value || !canRun.value) return;
   result.value = null;
+  keyResult.value = null;
   openChainIdx.value = {};
   busy.value = true;
   try {
-    const res = await window.electronAPI.viewPkcs12({
-      pfxFile: form.pfxFile,
-      pfxPassword: form.pfxPassword
-    });
-    result.value = res;
+    if (inputKind.value === "pfx") {
+      result.value = await window.electronAPI.viewPkcs12({
+        pfxFile: form.pfxFile,
+        pfxPassword: form.pfxPassword
+      });
+    } else if (inputKind.value === "keyUnencrypted") {
+      keyResult.value = await window.electronAPI.viewKey({
+        keyFile: form.pfxFile
+      });
+    }
   } catch {
-    result.value = { success: false, message: "error.internalError" };
+    const fail = { success: false, message: "error.internalError" } as const;
+    if (inputKind.value === "keyUnencrypted") keyResult.value = fail;
+    else result.value = fail;
   } finally {
     busy.value = false;
   }
@@ -132,6 +195,9 @@ function resetAll() {
   form.pfxFile = "";
   form.pfxPassword = "";
   result.value = null;
+  keyResult.value = null;
+  inputKind.value = null;
+  detectError.value = null;
   openChainIdx.value = {};
 }
 </script>
@@ -150,14 +216,14 @@ function resetAll() {
     </header>
 
     <Card :title="t('common.source')">
-      <Row :label="t('extract.pfxFile')" required>
+      <Row :label="t('view.inputFile')" required>
         <FileField
           :modelValue="form.pfxFile"
           @update:modelValue="(v: string) => (form.pfxFile = v)"
-          @browse="pickPfx"
+          @browse="pickInput"
         />
       </Row>
-      <Row :label="t('extract.pfxPassword')" required>
+      <Row v-if="inputKind === 'pfx'" :label="t('extract.pfxPassword')" required>
         <PasswordField
           :modelValue="form.pfxPassword"
           match-file
@@ -171,15 +237,41 @@ function resetAll() {
         <span
           v-if="inlineStatus"
           class="inline-status"
-          :class="{ success: result?.success, error: result && !result.success }"
+          :class="{ success: activeOpResult?.success, error: activeOpResult && !activeOpResult.success }"
         >{{ inlineStatus }}</span>
+        <span v-if="detecting" class="inline-status">{{ t("view.inputHint.detecting") }}</span>
         <span class="spacer-flex" />
       </template>
     </Card>
 
-    <Alert v-if="result && !result.success" kind="err" :title="t('common.failure')">
+    <Alert v-if="inputKind === 'keyUnencrypted'" kind="info">
+      {{ t("view.inputHint.unencryptedKey") }}
+    </Alert>
+    <Alert v-else-if="inputKind === 'keyEncrypted'" kind="warn" :title="t('common.failure')">
+      {{ detectErrorMessage }}
+    </Alert>
+    <Alert v-else-if="inputKind === 'unknown'" kind="err" :title="t('common.failure')">
+      {{ detectErrorMessage }}
+    </Alert>
+
+    <Alert v-if="activeOpResult && !activeOpResult.success" kind="err" :title="t('common.failure')">
       {{ failMessage }}
     </Alert>
+
+    <template v-if="keyView">
+      <Card :title="t('view.sections.privateKey')">
+        <div class="key-row">
+          <Badge kind="ok">{{ keyView.privateKey.algorithm }}</Badge>
+          <span class="mono">{{ keyView.privateKey.keySize }} bits</span>
+          <Badge :kind="keyView.privateKey.encrypted ? 'warn' : 'neutral'">
+            {{ keyView.privateKey.encrypted ? t("key.encryptedYes") : t("key.encryptedNo") }}
+          </Badge>
+        </div>
+        <Row v-if="keyView.privateKey.subjectKeyIdentifier" :label="t('cert.subjectKeyIdentifier')" stack>
+          <span class="mono fp">{{ keyView.privateKey.subjectKeyIdentifier }}</span>
+        </Row>
+      </Card>
+    </template>
 
     <template v-if="view">
       <Card :title="t('view.sections.privateKey')">
@@ -191,8 +283,8 @@ function resetAll() {
               {{ view.privateKey.encrypted ? t("key.encryptedYes") : t("key.encryptedNo") }}
             </Badge>
           </div>
-          <Row v-if="view.privateKey.publicKeySha256" :label="t('key.publicKeySha256')" stack>
-            <span class="mono fp">{{ view.privateKey.publicKeySha256 }}</span>
+          <Row v-if="view.privateKey.subjectKeyIdentifier" :label="t('cert.subjectKeyIdentifier')" stack>
+            <span class="mono fp">{{ view.privateKey.subjectKeyIdentifier }}</span>
           </Row>
         </template>
         <div v-else class="empty">{{ t("view.sections.noPrivateKey") }}</div>

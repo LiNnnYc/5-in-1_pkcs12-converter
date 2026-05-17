@@ -46,9 +46,6 @@ const { t } = useI18n();
     <Row :label="t('cert.fingerprintSha256')" stack>
       <span class="mono">{{ cert.fingerprint.sha256 || t("cert.empty") }}</span>
     </Row>
-    <Row :label="t('cert.publicKeySha256')" stack>
-      <span class="mono">{{ cert.publicKeySha256 || t("cert.empty") }}</span>
-    </Row>
   </div>
 </template>
 

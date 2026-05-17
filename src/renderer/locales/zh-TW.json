@@ -52,7 +52,7 @@
     "openOutputDir": "開啟輸出資料夾",
     "reportSession": "回報時請附上 Session ID：{id}",
     "precheckCompleted": "預檢查完成",
-    "mergeSucceeded": "PKCS #12 合成成功",
+    "mergeSucceeded": "PKCS #12 產製成功",
     "extractSucceeded": "已抽取私鑰與憑證",
     "extractSucceededNoChain": "已抽取私鑰與伺服器憑證（不包含 中繼/根 憑證）",
     "viewSucceeded": "PKCS #12 解析完成",
@@ -66,8 +66,8 @@
     "pageTitle": "產製 PKCS #12 檔案",
     "crumb": "私鑰 + 伺服器憑證 + CA 憑證鏈 → .pfx/.p12",
     "statusPrechecking": "預檢查中…",
-    "statusMerging": "合成中…",
-    "statusSuccess": "合成成功",
+    "statusMerging": "產製中…",
+    "statusSuccess": "產製成功",
     "statusError": "發生錯誤",
     "privateKey": "私鑰檔案",
     "privateKeyPassword": "私鑰密碼",
@@ -138,8 +138,13 @@
     "destAliasNotice": "輸出 JKS (.keystore) 的 PrivateKeyEntry 所屬 alias 值將固定為 \"1\""
   },
   "view": {
-    "pageTitle": "檢視 PKCS #12 檔案",
-    "crumb": ".pfx / .p12 → 結構化顯示（私鑰 / 憑證 / 憑證鏈）",
+    "pageTitle": "檢視 PKCS #12 / Key 檔案",
+    "crumb": ".pfx / .p12 / .key / .pem → 結構化顯示（私鑰 / 憑證 / 憑證鏈）",
+    "inputFile": "檔案來源",
+    "inputHint": {
+      "detecting": "偵測檔案類型中…",
+      "unencryptedKey": "偵測到未加密私鑰，無需密碼。請按「檢視」按鈕開始解析"
+    },
     "statusViewing": "解析中…",
     "statusSuccess": "解析完成",
     "statusError": "發生錯誤",
@@ -149,8 +154,8 @@
       "serverCert": "伺服器憑證",
       "chainCerts": "憑證鏈",
       "structure": "PKCS #12 檔案結構",
-      "noPrivateKey": "此 .pfx / .p12 不含私鑰",
-      "noChain": "此 .pfx / .p12 不含中繼憑證或根憑證",
+      "noPrivateKey": "這個 .pfx / .p12 檔案不含私鑰",
+      "noChain": "這個 .pfx / .p12 檔案不含中繼憑證或根憑證",
       "noStructure": "無法判讀檔案結構"
     },
     "expandHint": "點擊展開內容",
@@ -183,18 +188,16 @@
     "authorityKeyIdentifier": "授權單位金鑰\n識別元 (AKI)",
     "fingerprintSha1": "SHA-1 指紋",
     "fingerprintSha256": "SHA-256 指紋",
-    "publicKeySha256": "公鑰 SHA-256 指紋",
     "empty": "無"
   },
   "key": {
     "encrypted": "加密保護",
     "encryptedYes": "已加密",
-    "encryptedNo": "未加密",
-    "publicKeySha256": "公鑰 SHA-256 指紋"
+    "encryptedNo": "未加密"
   },
   "warning": {
     "title": "請確認以下警告",
-    "description": "合成前需針對每一項警告勾選確認",
+    "description": "產製檔案前需針對每一項警告勾選確認",
     "CHAIN_REORDERED": "憑證順序已被重新排列為 leaf → root",
     "CHAIN_HAS_EXTRA_CERTS": "已剔除與此鏈無關的憑證",
     "CHAIN_HAS_DUPLICATE_CERTS": "已移除重複的憑證",
@@ -232,13 +235,17 @@
     "verificationFailed": "輸出檔案驗證失敗",
     "listAliasesFailed": "無法列出 Keystore 所含的 alias 項目",
     "outputNotCreated": "輸出檔案未被建立",
-    "legacyP12RequiresRemerge": "偵測到 Legacy PKCS #12 —— 請先以 Legacy 模式抽取，再以 AES-256-CBC 重新合成後再轉成 JKS (.keystore)"
+    "legacyP12RequiresRemerge": "偵測到 Legacy PKCS #12 —— 請先以 Legacy 模式抽取私鑰和憑證，再用 AES-256-CBC 重新產製 PKCS #12 檔案後再轉成 JKS (.keystore)",
+    "encryptedKeyNotSupported": "暫不支援加密的私鑰檔案，請先以其他工具解密",
+    "unsupportedFileType": "無法辨識的檔案格式",
+    "useViewPkcs12Instead": "這是 .pfx / .p12 檔案，請使用 .pfx / .p12 檢視程序"
   },
   "dialog": {
     "selectPrivateKey": "選擇私鑰檔案",
     "selectCert": "選擇憑證檔案",
     "selectChain": "選擇中繼憑證 / 根憑證",
     "selectPfx": "選擇 .pfx / .p12 檔案",
+    "selectPfxOrKey": "選擇 .pfx / .p12 或私鑰檔",
     "selectOutput": "選擇輸出檔案",
     "selectOutputDir": "選擇輸出資料夾",
     "selectJks": "選擇 JKS (.keystore) 檔案",
@@ -247,6 +254,7 @@
       "cert": "憑證 (.pem, .crt, .cer)",
       "chain": "憑證檔案 (.pem, .crt, .cer, .der)",
       "pfx": "PKCS#12 (.pfx, .p12)",
+      "pfxOrKey": "PKCS#12 或私鑰 (.pfx, .p12, .key, .pem)",
       "jks": "Java KeyStore (.jks, .keystore)",
       "all": "所有檔案"
     }

@@ -5,6 +5,7 @@ import { resolveOpensslPath, resolveOpensslModulesDir } from "../utils/path-reso
 import { createHash } from "node:crypto";
 import { createLogger } from "../utils/logger";
 import { readFileForOpenssl } from "../utils/safe-path";
+import { formatHexColon } from "./output-parser";
 
 const log = createLogger("openssl");
 
@@ -156,38 +157,83 @@ function normalizePem(pem: string): string {
   return pem.replace(/\r\n/g, "\n").trim();
 }
 
-// SHA-256 over SubjectPublicKeyInfo DER, formatted as colon-separated uppercase hex.
-// Matches the "public key fingerprint" shown by tools like `ssh-keygen -l -f pubkey.pem`
-// in terms of representing the pubkey identity (though ssh-keygen emits base64/SHA-256:...).
-// Callers should pass a PEM blob with SPKI ("-----BEGIN PUBLIC KEY-----...").
-function spkiSha256Fingerprint(pubkeyPem: string): string {
-  const body = pubkeyPem
-    .replace(/-----BEGIN [^-]+-----/g, "")
-    .replace(/-----END [^-]+-----/g, "")
-    .replace(/\s+/g, "");
-  if (!body) return "";
-  const der = Buffer.from(body, "base64");
-  const hex = createHash("sha256").update(der).digest("hex").toUpperCase();
-  return hex.match(/.{2}/g)?.join(":") ?? "";
-}
-
-export async function publicKeyFingerprintFromKey(
+// RFC 5280 §4.2.1.2 Method 1 Subject Key Identifier — SHA-1 over the
+// BIT STRING value of the SubjectPublicKey inside SPKI (excluding tag,
+// length, and the unused-bits byte). This is what virtually every CA
+// computes and what Windows certificate viewer shows. Comparing this to
+// a cert's SKI lets a user verify by eye that a private key matches a
+// certificate.
+//
+// IMPORTANT: This is NOT "SHA-1 of the full SPKI DER" — that's a common
+// mistake; the resulting hash does not match real-world cert SKIs.
+export async function subjectKeyIdentifierFromKey(
   keyPath: string,
   password?: string
-): Promise<string> {
+): Promise<string | undefined> {
   const buf = await readFileForOpenssl(keyPath);
   const env: NodeJS.ProcessEnv = password ? { KEY_PASSWORD: password } : {};
   const passin = password ? ["-passin", "env:KEY_PASSWORD"] : [];
+  // PEM (text) over stdin avoids both Windows CRLF translation on DER stdin
+  // and runOpenssl's utf-8 stdout decoding. The body decoded from base64 is
+  // the SPKI DER we then parse to reach the BIT STRING value.
   const r = await runOpenssl(["pkey", "-pubout", ...passin], { env, stdin: buf });
-  if (r.exitCode !== 0) return "";
-  return spkiSha256Fingerprint(r.stdout);
+  if (r.exitCode !== 0) return undefined;
+  const body = r.stdout
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
+    .replace(/\s+/g, "");
+  if (!body) return undefined;
+  const spki = Buffer.from(body, "base64");
+  const pubKeyBits = extractSpkiBitStringValue(spki);
+  if (!pubKeyBits) return undefined;
+  const hex = createHash("sha1").update(pubKeyBits).digest("hex");
+  return formatHexColon(hex);
 }
 
-export async function publicKeyFingerprintFromCert(certPath: string): Promise<string> {
-  const buf = await readFileForOpenssl(certPath);
-  const r = await runOpenssl(["x509", "-pubkey", "-noout"], { stdin: buf });
-  if (r.exitCode !== 0) return "";
-  return spkiSha256Fingerprint(r.stdout);
+// Minimal DER walker for one specific shape:
+//   SubjectPublicKeyInfo ::= SEQUENCE {
+//     algorithm    AlgorithmIdentifier,
+//     subjectPublicKey  BIT STRING
+//   }
+// Returns the bytes inside the BIT STRING value (skipping the leading
+// "unused bits" byte), which is what RFC 5280 Method 1 hashes.
+function extractSpkiBitStringValue(spki: Buffer): Buffer | undefined {
+  // Outer SEQUENCE
+  let p = 0;
+  if (spki[p++] !== 0x30) return undefined;
+  const outerLen = readDerLength(spki, p);
+  if (!outerLen) return undefined;
+  p = outerLen.next;
+
+  // Inner AlgorithmIdentifier SEQUENCE — skip wholesale.
+  if (spki[p++] !== 0x30) return undefined;
+  const algLen = readDerLength(spki, p);
+  if (!algLen) return undefined;
+  p = algLen.next + algLen.length;
+
+  // BIT STRING
+  if (spki[p++] !== 0x03) return undefined;
+  const bitLen = readDerLength(spki, p);
+  if (!bitLen) return undefined;
+  // First byte of BIT STRING value is the count of unused trailing bits;
+  // strip it to leave only the key bytes RFC 5280 Method 1 hashes.
+  const start = bitLen.next + 1;
+  const end = bitLen.next + bitLen.length;
+  if (start > end || end > spki.length) return undefined;
+  return spki.subarray(start, end);
+}
+
+function readDerLength(buf: Buffer, offset: number): { length: number; next: number } | undefined {
+  if (offset >= buf.length) return undefined;
+  const first = buf[offset];
+  if ((first & 0x80) === 0) {
+    return { length: first, next: offset + 1 };
+  }
+  const n = first & 0x7f;
+  if (n === 0 || n > 4 || offset + 1 + n > buf.length) return undefined;
+  let len = 0;
+  for (let i = 1; i <= n; i++) len = (len << 8) | buf[offset + i];
+  return { length: len, next: offset + 1 + n };
 }
 
 // Dump PKCS#12 structural metadata (MAC, bag encryption, friendlyName, localKeyID).

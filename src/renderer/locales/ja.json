@@ -118,7 +118,7 @@
     "aliasPickerTitle": "エクスポートするエイリアスを選択",
     "aliasPickerHint": "この JKS (.keystore) にはエクスポート可能な PrivateKeyEntry エイリアスが複数含まれています — .pfx / .p12 にエクスポートするものを 1 つ選択してください",
     "singleAliasNotice": "利用可能なエイリアスは 1 件のみ: {alias}",
-    "trustedCertSkipped": "{count} 件の TrustedCertEntry エイリアスをスキップしました — 秘密鍵を持たない証明書のみのエントリは .pfx / .p12 にエクスポートできません"
+    "trustedCertSkipped": "{count} 件の TrustedCertEntry エイリアスをスキップしました — 秘密鍵を持たない証明書のエントリは .pfx / .p12 にエクスポートできません"
   },
   "p12ToJks": {
     "pageTitle": "PKCS #12 → JKS ファイル",
@@ -138,8 +138,13 @@
     "destAliasNotice": "出力 JKS (.keystore) の PrivateKeyEntry のエイリアス値は \"1\" に固定されます"
   },
   "view": {
-    "pageTitle": "PKCS #12 ファイルを解析",
-    "crumb": ".pfx / .p12 → 構造化表示（鍵 / 証明書 / CA チェーン）",
+    "pageTitle": "PKCS #12 / Key ファイルを解析",
+    "crumb": ".pfx / .p12 / .key / .pem → 構造化表示（鍵 / 証明書 / CA チェーン）",
+    "inputFile": "入力ファイル",
+    "inputHint": {
+      "detecting": "ファイル種別を検出中…",
+      "unencryptedKey": "暗号化されていない秘密鍵を検出しました — パスワード不要。「表示」ボタンを押して解析してください"
+    },
     "statusViewing": "解析中…",
     "statusSuccess": "解析完了",
     "statusError": "エラー",
@@ -183,14 +188,12 @@
     "authorityKeyIdentifier": "認証局鍵 \n識別子 (AKI)",
     "fingerprintSha1": "SHA-1 \nフィンガープリント",
     "fingerprintSha256": "SHA-256 \nフィンガープリント",
-    "publicKeySha256": "公開鍵 SHA-256 \nフィンガープリント",
     "empty": "なし"
   },
   "key": {
     "encrypted": "暗号化",
     "encryptedYes": "暗号化あり",
-    "encryptedNo": "暗号化なし",
-    "publicKeySha256": "公開鍵 SHA-256 \nフィンガープリント"
+    "encryptedNo": "暗号化なし"
   },
   "warning": {
     "title": "以下の警告を確認してください",
@@ -232,13 +235,17 @@
     "verificationFailed": "出力の検証に失敗しました",
     "listAliasesFailed": "キーストアのエイリアスを取得できません",
     "outputNotCreated": "出力ファイルが作成されませんでした",
-    "legacyP12RequiresRemerge": "レガシー形式の PKCS #12 ファイルを検出しました — まずレガシーモード ON で抽出し、AES-256-CBC で再生成してから JKS に変換してください"
+    "legacyP12RequiresRemerge": "レガシー形式の PKCS #12 ファイルを検出しました — まずはレガシーモード ON で秘密鍵と証明書を抽出し、AES-256-CBC で　PKCS #12　を再生成してから JKS に変換してください",
+    "encryptedKeyNotSupported": "暗号化された秘密鍵は未対応です — 先に他のツールで復号してください",
+    "unsupportedFileType": "認識できないファイル形式",
+    "useViewPkcs12Instead": "これは .pfx / .p12 ファイルです — .pfx / .p12 ビューフローをご利用ください"
   },
   "dialog": {
     "selectPrivateKey": "秘密鍵を選択",
     "selectCert": "証明書を選択",
     "selectChain": "中間 / ルート証明書を選択",
     "selectPfx": ".pfx / .p12 ファイルを選択",
+    "selectPfxOrKey": ".pfx / .p12 または秘密鍵ファイルを選択",
     "selectOutput": "出力ファイルを選択",
     "selectOutputDir": "出力フォルダーを選択",
     "selectJks": "JKS (.keystore) ファイルを選択",
@@ -247,6 +254,7 @@
       "cert": "証明書 (.pem, .crt, .cer)",
       "chain": "証明書ファイル (.pem, .crt, .cer, .der)",
       "pfx": "PKCS #12 (.pfx, .p12)",
+      "pfxOrKey": "PKCS #12 / 秘密鍵 (.pfx, .p12, .key, .pem)",
       "jks": "Java KeyStore (.jks, .keystore)",
       "all": "すべてのファイル"
     }
@@ -276,7 +284,7 @@
         "debug": "Debug：すべてのメッセージを収集",
         "info": "Info（既定）：info / warn / error メッセージを収集",
         "warn": "Warn：warn / error メッセージのみ収集",
-        "error": "Error：\"error\" メッセージのみ収集（失敗時は常に記録されます）"
+        "error": "Error：\"error\" メッセージのみ収集（エラー発生時は強制記録）"
       }
     },
     "engines": {

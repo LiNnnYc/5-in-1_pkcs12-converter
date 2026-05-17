@@ -12,7 +12,10 @@ import type {
   P12ToJksRequest,
   OperationResult,
   MergePrecheckResult,
-  Pkcs12ViewResult
+  Pkcs12ViewResult,
+  DetectInputTypeResult,
+  ViewKeyRequest,
+  KeyViewResult
 } from "../types";
 
 export type AppSettings = {
@@ -42,6 +45,8 @@ declare global {
       mergePkcs12: (params: MergeRequest) => Promise<OperationResult>;
       extractPkcs12: (params: ExtractRequest) => Promise<OperationResult>;
       viewPkcs12: (params: ViewRequest) => Promise<OperationResult<Pkcs12ViewResult>>;
+      viewKey: (params: ViewKeyRequest) => Promise<OperationResult<KeyViewResult>>;
+      detectInputType: (filePath: string) => Promise<DetectInputTypeResult>;
       jksToP12: (params: JksToP12Request) => Promise<OperationResult>;
       p12ToJks: (params: P12ToJksRequest) => Promise<OperationResult>;
       listKeystoreAliases: (params: ListAliasesRequest) => Promise<OperationResult<{ aliases: AliasEntry[] }>>;

@@ -22,7 +22,7 @@ function normalizeHex(hex: string): string {
   return hex.replace(/[\s:]+/g, "").toLowerCase();
 }
 
-function formatHexColon(hex: string): string {
+export function formatHexColon(hex: string): string {
   const clean = normalizeHex(hex).toUpperCase();
   return clean.match(/.{1,2}/g)?.join(":") ?? clean;
 }

@@ -11,11 +11,14 @@ import type {
   OpenDirectoryDialogRequest,
   ListAliasesRequest,
   JksToP12Request,
-  P12ToJksRequest
+  P12ToJksRequest,
+  ViewKeyRequest
 } from "../types";
 import { mergePrecheck, mergePkcs12 } from "./services/merge-service";
 import { extractPkcs12 } from "./services/extract-service";
 import { viewPkcs12 } from "./services/view-service";
+import { detectInputType } from "./services/detect-input-service";
+import { viewKey } from "./services/view-key-service";
 import { jksToP12, p12ToJks, listKeystoreAliases } from "./services/convert-service";
 import { mapError } from "./services/error-mapper";
 import { loadSettings, saveSettings, type AppSettings } from "./services/settings-service";
@@ -61,6 +64,28 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle("pkcs12:view", async (_e, params: ViewRequest) => {
     return guard("pkcs12:view", () => viewPkcs12(params));
+  });
+
+  ipcMain.handle("pkcs12:viewKey", async (_e, params: ViewKeyRequest) => {
+    return guard("pkcs12:viewKey", () => viewKey(params));
+  });
+
+  // Returns a DetectInputTypeResult directly (not wrapped in OperationResult)
+  // because the renderer needs the discriminant to drive UI conditionally;
+  // wrapping would just add a layer for the UI to unpack.
+  ipcMain.handle("pkcs12:detectInputType", async (_e, filePath: string) => {
+    const startedAt = Date.now();
+    try {
+      if (typeof filePath !== "string" || filePath.length === 0) {
+        return { kind: "unknown", reason: "invalid path" };
+      }
+      const r = await detectInputType(filePath);
+      log.info("handled", { channel: "pkcs12:detectInputType", kind: r.kind, durationMs: Date.now() - startedAt });
+      return r;
+    } catch (e) {
+      log.error("unexpected throw", { channel: "pkcs12:detectInputType", durationMs: Date.now() - startedAt }, e as Error);
+      return { kind: "unknown", reason: "internal error" };
+    }
   });
 
   ipcMain.handle("jks:toP12", async (_e, params: JksToP12Request) => {

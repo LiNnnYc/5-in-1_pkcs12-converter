@@ -138,8 +138,13 @@
     "destAliasNotice": "The output JKS (.keystore) PrivateKeyEntry's alias value is fixed to \"1\""
   },
   "view": {
-    "pageTitle": "Parse PKCS #12 File",
-    "crumb": ".pfx / .p12 → structured view (key / cert / CA chain)",
+    "pageTitle": "Parse PKCS #12 / Key File",
+    "crumb": ".pfx / .p12 / .key / .pem → structured view (key / cert / CA chain)",
+    "inputFile": "Input File",
+    "inputHint": {
+      "detecting": "Detecting file type…",
+      "unencryptedKey": "Unencrypted private key detected — no password needed. Click the “View” button to parse it"
+    },
     "statusViewing": "Parsing…",
     "statusSuccess": "Parsed",
     "statusError": "Error",
@@ -183,14 +188,12 @@
     "authorityKeyIdentifier": "Authority Key \nIdentifier (AKI)",
     "fingerprintSha1": "SHA-1 Fingerprint",
     "fingerprintSha256": "SHA-256 Fingerprint",
-    "publicKeySha256": "Public Key SHA-256 \nFingerprint",
     "empty": "None"
   },
   "key": {
     "encrypted": "Encrypted",
     "encryptedYes": "Encrypted",
-    "encryptedNo": "Unencrypted",
-    "publicKeySha256": "Public key SHA-256 \nfingerprint"
+    "encryptedNo": "Unencrypted"
   },
   "warning": {
     "title": "Please confirm the following warnings",
@@ -232,13 +235,17 @@
     "verificationFailed": "Output verification failed",
     "listAliasesFailed": "Unable to list keystore aliases",
     "outputNotCreated": "Output file was not created",
-    "legacyP12RequiresRemerge": "Legacy PKCS #12 file detected — extract with Legacy mode ON, then re-create with AES-256-CBC before converting to JKS"
+    "legacyP12RequiresRemerge": "Legacy PKCS #12 file detected — extract with Legacy mode ON, then re-create with AES-256-CBC before converting to JKS",
+    "encryptedKeyNotSupported": "Encrypted private keys are not supported yet — please decrypt first",
+    "unsupportedFileType": "Unsupported file format",
+    "useViewPkcs12Instead": "This is a .pfx / .p12 file — use the .pfx / .p12 view flow"
   },
   "dialog": {
     "selectPrivateKey": "Select private key",
     "selectCert": "Select certificate",
     "selectChain": "Select intermediate / root certificates",
     "selectPfx": "Select .pfx / .p12 file",
+    "selectPfxOrKey": "Select .pfx / .p12 or private key",
     "selectOutput": "Select output file",
     "selectOutputDir": "Select output folder",
     "selectJks": "Select JKS (.keystore) file",
@@ -247,6 +254,7 @@
       "cert": "Certificate (.pem, .crt, .cer)",
       "chain": "Certificate file (.pem, .crt, .cer, .der)",
       "pfx": "PKCS #12 (.pfx, .p12)",
+      "pfxOrKey": "PKCS #12 or private key (.pfx, .p12, .key, .pem)",
       "jks": "Java KeyStore (.jks, .keystore)",
       "all": "All files"
     }
@@ -276,7 +284,7 @@
         "debug": "Debug：Collects all messages",
         "info": "Info (default)：Collects info / warn / error Messages",
         "warn": "Warn：Collects warn / error Messages only",
-        "error": "Error：Collects \"error\" Messages only (Always recorded on failure)"
+        "error": "Error：Collects \"error\" Messages only (Always logged on failure)"
       }
     },
     "engines": {

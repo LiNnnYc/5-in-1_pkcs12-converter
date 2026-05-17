@@ -8,9 +8,8 @@ import {
   dumpPkcs12Info,
   parseCertificateText,
   parseKeyInfo,
-  publicKeyFingerprintFromCert,
-  publicKeyFingerprintFromKey,
-  runOpenssl
+  runOpenssl,
+  subjectKeyIdentifierFromKey
 } from "../engines/openssl-runner";
 import {
   classifyError,
@@ -109,8 +108,8 @@ export async function viewPkcs12(
       const keyText = await parseKeyInfo(keyTmp);
       if (keyText.exitCode === 0) {
         privateKey = parsePrivateKeyInfo(keyText.stdout);
-        const fp = await publicKeyFingerprintFromKey(keyTmp);
-        if (fp) privateKey.publicKeySha256 = fp;
+        const ski = await subjectKeyIdentifierFromKey(keyTmp);
+        if (ski) privateKey.subjectKeyIdentifier = ski;
       }
     }
 
@@ -125,8 +124,6 @@ export async function viewPkcs12(
       const textRes = await parseCertificateText(path);
       if (textRes.exitCode !== 0) continue;
       const info = parseCertInfo(textRes.stdout);
-      const fp = await publicKeyFingerprintFromCert(path);
-      if (fp) info.publicKeySha256 = fp;
       parsedCerts.push(info);
     }
 
