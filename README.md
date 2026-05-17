@@ -16,7 +16,7 @@ Five common PKCS #12 / JKS operations in one GUI:
 
 1. **Generate** — combine a private key + certificate + intermediate chain into a `.pfx` (AES-256-CBC or PBE-SHA1-3DES)
 2. **Extract** — split a `.pfx` back into key + certificates (combined `.pem` or per-cert `.crt`)
-3. **View** — inspect a `.pfx` (private key info, full chain, SAN, SKI, fingerprints, PKCS #12 structure)
+3. **View** — inspect a `.pfx` (private key info, full chain, SAN, SKI, fingerprints, PKCS #12 structure) or a standalone unencrypted private key (`.key` / `.pem`) for SKI comparison against Windows certificate viewer
 4. **JKS → P12** — convert a Java KeyStore into PKCS #12 (with alias picker for multi-entry stores)
 5. **P12 → JKS** — convert a PKCS #12 into a Java KeyStore (legacy PFX is auto-repackaged)
 
@@ -83,7 +83,7 @@ Electron 33 · Vue 3.5 · Vite 6 · TypeScript 5.7 · vue-i18n 10 · electron-bu
 
 1. **產製** — 私鑰 + 憑證 + 中繼憑證合成為 `.pfx`（AES-256-CBC 或 PBE-SHA1-3DES）
 2. **抽取** — 從 `.pfx` 拆出私鑰與憑證（合併 `.pem` 或拆分 `.crt`）
-3. **檢視** — 檢視 `.pfx` 內容（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS #12 結構）
+3. **檢視** — 檢視 `.pfx`（私鑰資訊、完整憑證鏈、SAN、SKI、fingerprint、PKCS #12 結構），或獨立的未加密私鑰檔（`.key` / `.pem`）以對照 Windows 憑證檢視器顯示的 SKI
 4. **JKS → P12** — Java KeyStore 轉 PKCS #12（多 entry 時可挑選 alias）
 5. **P12 → JKS** — PKCS #12 轉 Java KeyStore
 
