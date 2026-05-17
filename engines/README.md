@@ -1,6 +1,102 @@
 # engines/
 
-本資料夾存放兩個第三方執行檔的轉檔引擎，**不推入 git**（被 `.gitignore` 排除）。
+> 中文使用者請見下方的 [繁體中文版本](#繁體中文)。
+
+## English
+
+This folder holds the two third-party engine executables that the app shells out to. **Not tracked in git** (excluded by `.gitignore`).
+
+- **End users** don't need to read any of this — just download Portable build from [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases); the engines are already bundled.
+- **Build / dev-mode developers** need to follow this guide to populate the folder locally.
+
+At packaging time (`npm run package`), electron-builder copies the entire `engines/` folder into the portable exe via `extraResources`. Path resolution lives in `src/main/utils/path-resolver.ts`.
+
+### Expected directory layout
+
+```
+engines/
+├── openssl/
+│   ├── openssl.exe
+│   ├── libcrypto-3-x64.dll
+│   ├── libssl-3-x64.dll
+│   └── ossl-modules/
+│       └── legacy.dll               # required to parse PBE-SHA1-3DES legacy PFX
+└── jre-minimal/
+    ├── bin/
+    │   ├── java.exe
+    │   ├── keytool.exe
+    │   └── ... (other DLLs ship with Temurin)
+    ├── conf/
+    ├── lib/
+    ├── legal/
+    └── release
+```
+
+### OpenSSL 3.5.0 (Windows x64)
+
+Source: [FireDaemon OpenSSL](https://kb.firedaemon.com/support/solutions/articles/4000121705) (FireDaemon publishes the official Windows static builds, legacy provider included).
+
+Extract the following files from the installer / zip into `engines/openssl/`:
+
+| File | Purpose |
+|------|---------|
+| `openssl.exe` | main executable |
+| `libcrypto-3-x64.dll` | crypto runtime |
+| `libssl-3-x64.dll` | SSL/TLS runtime |
+| `ossl-modules/legacy.dll` | legacy provider; required to read older PBE-SHA1-3DES PFX files |
+
+**Version compatibility**: this project is developed and tested against OpenSSL 3.5.0 (8 Apr 2025). Other 3.x versions should work in theory, but stderr/stdout formats can shift and may break the regexes in `output-parser.ts`.
+
+Verify:
+```bash
+engines/openssl/openssl.exe version
+# Expected: OpenSSL 3.5.0 8 Apr 2025 (Library: OpenSSL 3.5.0 8 Apr 2025)
+```
+
+### JRE-minimal (Temurin 21 + jlink)
+
+Source: [Adoptium Temurin JDK 21](https://adoptium.net/temurin/releases/?version=21) (you must pick the **JDK**, not the JRE — `jlink` only ships with the JDK).
+
+Module extraction command (run from the unpacked JDK root):
+
+```bash
+bin/jlink \
+  --add-modules java.base,java.logging,java.security.sasl,java.naming,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.localedata \
+  --strip-debug --no-header-files --no-man-pages --compress=2 \
+  --output <project-path>/engines/jre-minimal
+```
+
+**Module rationale**:
+
+| Module | Purpose |
+|--------|---------|
+| `java.base` | required |
+| `java.logging` | keytool's internal logging |
+| `java.security.sasl` | required by early-startup module resolution (residual from older module graphs) |
+| `java.naming` | parses Distinguished Names |
+| `jdk.crypto.ec` | EC curves (P-256 / P-384 etc.) |
+| `jdk.crypto.cryptoki` | PKCS#11 / PKCS#12 keystore engine |
+| `jdk.localedata` | handles CJK aliases / Subject DNs (mojibake otherwise) |
+
+Verify:
+```bash
+engines/jre-minimal/bin/java.exe -version
+# Expected: openjdk version "21.0.10" ... Temurin-21.0.10+7
+engines/jre-minimal/bin/keytool.exe -help 2>&1 | head -3
+```
+
+### Security / trust sources
+
+- Both engines are upstream official releases (the OpenSSL Project and Eclipse Adoptium); FireDaemon is a long-standing Windows pre-built distribution maintained within the OpenSSL community.
+- All engine invocations use `execFile` rather than `exec` (no shell parsing), eliminating argv injection.
+- `OPENSSL_MODULES` and `OPENSSL_CONF` are force-set inside `openssl-runner.ts` so the user's system-level OpenSSL configuration cannot interfere.
+- See [spec.md](../spec.md) §5 / §7 for the full rationale.
+
+---
+
+## 繁體中文
+
+本資料夾存放兩個第三方執行檔的轉檔引擎，**不推進 git**（被 `.gitignore` 排除）。
 
 - **一般使用者** 不用閱讀以下內容 — 直接前往 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 下載 portable 版本 `.zip` 即可，引擎已內建。
 - **build / dev mode 的開發者** 才需要照以下說明準備本機檔案。
