@@ -1,6 +1,6 @@
 {
   "name": "5-in-1_pkcs12-converter",
-  "version": "1.0.2-1",
+  "version": "1.0.2",
   "private": true,
   "description": "Windows desktop app for PKCS#12 workflows — generate, extract, view, and JKS ↔ P12 conversion. Portable, offline, no install required.",
   "license": "MIT",
