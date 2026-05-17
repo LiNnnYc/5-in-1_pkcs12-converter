@@ -1,11 +1,11 @@
 # engines/
 
-本資料夾存放兩個第三方執行檔轉檔引擎，**不上 git**（被 `.gitignore` 排除）。
+本資料夾存放兩個第三方執行檔的轉檔引擎，**不推入 git**（被 `.gitignore` 排除）。
 
-- **一般使用者** 不需要碰這裡 — 直接到 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 下載 portable `.exe` 即可，引擎已內嵌。
-- **build / dev mode 的開發者** 才需要照以下說明準備本地檔案。
+- **一般使用者** 不用閱讀以下內容 — 直接前往 [Releases](https://github.com/LiNnnYc/5-in-1_pkcs12-converter/releases) 下載 portable 版本 `.zip` 即可，引擎已內建。
+- **build / dev mode 的開發者** 才需要照以下說明準備本機檔案。
 
-打包後（`npm run package`）electron-builder 會把 `engines/` 資料夾以 `extraResources` 形式包進 portable exe，路徑解析檔為 `src/main/utils/path-resolver.ts`。
+打包後的（`npm run package`）electron-builder 會把 `engines/` 資料夾以 `extraResources` 形式包進 portable exe，路徑解析檔為 `src/main/utils/path-resolver.ts`。
 
 ## 預期目錄結構
 
@@ -16,7 +16,7 @@ engines/
 │   ├── libcrypto-3-x64.dll
 │   ├── libssl-3-x64.dll
 │   └── ossl-modules/
-│       └── legacy.dll               # 解 PBE-SHA1-3DES 舊式 PFX 必備
+│       └── legacy.dll               # 解析 PBE-SHA1-3DES 舊式 PFX 必備檔案
 └── jre-minimal/
     ├── bin/
     │   ├── java.exe
@@ -30,9 +30,9 @@ engines/
 
 ## OpenSSL 3.5.0（Windows x64）
 
-下載來源：[FireDaemon OpenSSL](https://kb.firedaemon.com/support/solutions/articles/4000121705)（FireDaemon 提供 Windows 官方靜態 build，含 legacy provider）
+來源：[FireDaemon OpenSSL](https://kb.firedaemon.com/support/solutions/articles/4000121705)（FireDaemon 提供 Windows 官方靜態 build，含 legacy provider）
 
-從安裝包 / zip 取出以下檔案放到 `engines/openssl/`：
+從安裝包 / zip 取出以下檔案置放到 `engines/openssl/`：
 
 | 檔名 | 說明 |
 |------|------|
@@ -41,19 +41,19 @@ engines/
 | `libssl-3-x64.dll` | SSL/TLS runtime |
 | `ossl-modules/legacy.dll` | legacy provider，解析舊式 PBE-SHA1-3DES PFX 必備 |
 
-**版本相容性**：本專案在 OpenSSL 3.5.0 (8 Apr 2025) 上開發測試。3.x 系列其他版本理論上可用，但 stderr/stdout 的格式不同可能會打破 `output-parser.ts` 的 regex。
+**版本相容性**：本專案建立在 OpenSSL 3.5.0 (8 Apr 2025) 基礎上進行開發與測試。3.x 系列等版本理論上可用，但 stderr/stdout 的格式不同可能會影響 `output-parser.ts` 的 regex 運作。
 
 驗證：
 ```bash
 engines/openssl/openssl.exe version
-# 預期：OpenSSL 3.5.0 8 Apr 2025 (Library: OpenSSL 3.5.0 8 Apr 2025)
+# 預期輸出：OpenSSL 3.5.0 8 Apr 2025 (Library: OpenSSL 3.5.0 8 Apr 2025)
 ```
 
 ## JRE-minimal（Temurin 21 + jlink）
 
-來源：[Adoptium Temurin JDK 21](https://adoptium.net/temurin/releases/?version=21)（不是 JRE — 要 JDK，因為 jlink 需要）
+來源：[Adoptium Temurin JDK 21](https://adoptium.net/temurin/releases/?version=21)（不能選擇 JRE — 必須選擇 JDK，因為 jlink 使用上需要）
 
-抽取必要模組的指令（在解壓縮後的 JDK 根目錄下執行）：
+抽取模組的必要指令（在解壓縮後的 JDK 根目錄下執行）：
 
 ```bash
 bin/jlink \
@@ -68,11 +68,11 @@ bin/jlink \
 |------|------|
 | `java.base` | 必備 |
 | `java.logging` | keytool 內部日誌 |
-| `java.security.sasl` | 早期版本啟動需要（舊 module 解析鏈遺留） |
+| `java.security.sasl` | 啟動早期版本的必須檔案（舊 module 解析鏈的殘留痕跡） |
 | `java.naming` | 處理 Distinguished Name |
 | `jdk.crypto.ec` | EC 曲線（P-256 / P-384 等） |
 | `jdk.crypto.cryptoki` | PKCS#11 / PKCS#12 keystore engine |
-| `jdk.localedata` | 處理 CJK alias / Subject DN（少了會 mojibake） |
+| `jdk.localedata` | 處理 CJK alias / Subject DN（缺少會 mojibake） |
 
 驗證：
 ```bash
@@ -83,7 +83,7 @@ engines/jre-minimal/bin/keytool.exe -help 2>&1 | head -3
 
 ## 安全性 / 信任來源
 
-- 兩個引擎都是上游官方 release（OpenSSL Project、Eclipse Adoptium），FireDaemon 是 OpenSSL 維護社群提供的 Windows 預編譯版。
-- 程式對引擎呼叫一律使用 `execFile` 不用 `exec`（不會經過 shell parsing），避免 argv 注入。
+- 兩個引擎都是官方上游 release（OpenSSL Project、Eclipse Adoptium），FireDaemon 是 OpenSSL 維護社群所提供的 Windows 預編譯版。
+- 程式對引擎的呼叫一律使用 `execFile` 不使用 `exec`（不會經過 shell parsing），避免 argv 注入。
 - `OPENSSL_MODULES`、`OPENSSL_CONF` 等環境變數在 `openssl-runner.ts` 內被強制設定，避免受到使用者的系統設定干擾。
-- 詳見 [spec.md](../spec.md) §5 / §7。
+- 詳細請見 [spec.md](../spec.md) §5 / §7。
