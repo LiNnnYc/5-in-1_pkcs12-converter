@@ -13,7 +13,7 @@ const log = createLogger("viewKey");
 //
 // v1 explicitly refuses encrypted keys: the merge/extract flows already
 // handle passwords, but adding a password UX here just for read-only viewing
-// would broaden scope without clear user value (see KEY_VIEW_PLAN decision 5).
+// would broaden scope without clear user value (see docs_archive/KEY_VIEW_PLAN.md decision 5).
 export async function viewKey(
   params: ViewKeyRequest
 ): Promise<OperationResult<KeyViewResult>> {
